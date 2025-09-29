@@ -6,6 +6,8 @@ set -euo pipefail
 
 # Configuration
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly PROJECT_DIR="$(pwd)"
+readonly PROJECT_NAME="$(basename "$PROJECT_DIR")"
 readonly DOCKERFILE_PATH="${SCRIPT_DIR}/Dockerfile"
 readonly ENTRYPOINT_PATH="${SCRIPT_DIR}/entrypoint.sh"
 readonly IMAGE_NAME="agentbox:latest"
@@ -51,8 +53,7 @@ calculate_hash() {
 
 # Get container name for current project
 get_container_name() {
-    local project_dir="$(pwd)"
-    local project_hash=$(echo -n "$project_dir" | sha256sum | cut -c1-12)
+    local project_hash=$(echo -n "$PROJECT_DIR" | sha256sum | cut -c1-12)
     echo "${CONTAINER_PREFIX}-${project_hash}"
 }
 
@@ -165,18 +166,16 @@ run_container() {
     fi
 
     local cmd_args=("$@")
-    local project_dir="$(pwd)"
-    local project_name="$(basename "$project_dir")"
 
     if [[ "$admin_mode" == "true" ]]; then
-        log_success "Starting container for: $project_name (admin shell)"
+        log_success "Starting container for: $PROJECT_NAME (admin shell)"
     else
-        log_success "Starting container for: $project_name"
+        log_success "Starting container for: $PROJECT_NAME"
     fi
 
     # Prepare mount options
     local mount_opts=(
-        -v "${project_dir}:/workspace:z"
+        -v "$PROJECT_DIR:/workspace:z"
     )
 
     # Mount .gitconfig if it exists
@@ -257,11 +256,19 @@ run_container() {
         container_cmd=(zsh -c "source ~/.zshrc && exec ${cmd_args[*]:-claude --dangerously-skip-permissions}")
     fi
 
+    # Check for .env file in project directory and add to docker args
+    local env_file_args=()
+    if [[ -f "$PROJECT_DIR/.env" ]]; then
+        env_file_args+=(--env-file "$PROJECT_DIR/.env")
+        log_info ".env file found and will be loaded into container"
+    fi
+
     # Run ephemeral container with --rm
     docker run -it --rm \
         --name "$container_name" \
-        --hostname "agentbox-${project_name}" \
+        --hostname "agentbox-$PROJECT_NAME" \
         "${mount_opts[@]}" \
+        "${env_file_args[@]}" \
         -w /workspace \
         --init \
         "$IMAGE_NAME" \
