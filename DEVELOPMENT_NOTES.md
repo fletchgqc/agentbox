@@ -25,6 +25,8 @@ This is a simplified replacement for ClaudeBox - a complex Docker-based developm
 - Automatic image rebuild when Dockerfile/entrypoint changes (via hash tracking)
 - Container persistence per project (survives restarts)
 - Package manager cache persistence in `~/.cache/agentbox/<container-name>/`
+- Shell history persistence in `~/.agentbox/projects/<container-name>/history/` (zsh, bash)
+- Claude CLI configuration mounted from `~/.claude` (shared across all containers)
 - Automatic cleanup of outdated containers after rebuild
 - SSH agent forwarding instead of mounting SSH keys (security improvement)
 - Support for running multiple projects simultaneously
@@ -39,8 +41,11 @@ Single Dockerfile → Build once → agentbox:latest image
           Container: project1    Container: project2    Container: project3
           Mounts: ~/code/api    Mounts: ~/code/web     Mounts: ~/code/cli
           Cache: ~/.cache/agentbox/agentbox-<hash1>/
+          Project: ~/.agentbox/projects/agentbox-<hash1>/
                                 agentbox/agentbox-<hash2>/
-                                agentbox/agentbox-<hash3>/
+                                ~/.agentbox/projects/agentbox-<hash2>/
+                                                agentbox/agentbox-<hash3>/
+                                                ~/.agentbox/projects/agentbox-<hash3>/
 ```
 
 ### Testing Status

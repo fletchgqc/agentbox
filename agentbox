@@ -199,6 +199,27 @@ run_container() {
             -v "${cache_dir}/gradle:/home/claude/.gradle"
         )
 
+        # Mount per-project persistent data
+        local project_dir="${HOME}/.agentbox/projects/${container_name}"
+        local history_dir="${project_dir}/history"
+        mkdir -p "${history_dir}"
+
+        # Create history files if they don't exist
+        touch "${history_dir}/zsh_history"
+        touch "${history_dir}/bash_history"
+
+        mount_opts+=(
+            -v "${history_dir}/zsh_history:/home/claude/.zsh_history"
+            -v "${history_dir}/bash_history:/home/claude/.bash_history"
+        )
+
+        # Mount Claude CLI configuration if it exists
+        if [[ -d "${HOME}/.claude" ]]; then
+            # Mount the entire Claude directory as read-write for full functionality
+            mount_opts+=(-v "${HOME}/.claude:/home/claude/.claude:rw")
+            log_info "Claude CLI configuration mounted"
+        fi
+
         # Run container
         docker run -d \
             --name "$container_name" \
