@@ -56,6 +56,7 @@ get_container_name() {
     echo "${CONTAINER_PREFIX}-${project_hash}"
 }
 
+
 # Check if image needs rebuild
 needs_rebuild() {
     # Calculate current Dockerfile and entrypoint hashes
@@ -217,12 +218,31 @@ run_container() {
         -v "${history_dir}/bash_history:/home/claude/.bash_history"
     )
 
-    # Mount Claude CLI configuration if it exists
-    if [[ -d "${HOME}/.claude" ]]; then
-        # Mount the entire Claude directory as read-write for full functionality
-        mount_opts+=(-v "${HOME}/.claude:/home/claude/.claude:rw")
-        log_info "Claude CLI configuration mounted"
+    # Use Docker named volume for Claude config (like Anthropic's devcontainer)
+    local claude_volume_name="agentbox-claude-${container_name#agentbox-}"
+
+    # Check if volume exists and initialize if needed
+    if ! docker volume inspect "$claude_volume_name" &>/dev/null; then
+        log_info "Creating Claude CLI volume and copying authentication from global config"
+        docker volume create "$claude_volume_name" &>/dev/null
+
+        # Initialize volume with global Claude config if it exists
+        if [[ -d "${HOME}/.claude" ]]; then
+            # Use a temporary container to copy data to the volume
+            docker run --rm \
+                -v "${HOME}/.claude:/source:ro" \
+                -v "${claude_volume_name}:/dest" \
+                "$IMAGE_NAME" \
+                sh -c "cp -r /source/* /dest/ 2>/dev/null || true"
+        fi
     fi
+
+    mount_opts+=(-v "${claude_volume_name}:/home/claude/.claude")
+
+    # Set Claude config directory environment variable
+    mount_opts+=(--env "CLAUDE_CONFIG_DIR=/home/claude/.claude")
+
+    log_info "Claude CLI configuration mounted"
 
     # Prepare the command to run
     local container_cmd

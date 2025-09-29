@@ -128,3 +128,28 @@ The user plans to move this to another location and continue testing/development
 **Recommendation**: Accept as cosmetic limitation. Core functionality is fully operational and this is likely present in other containerized Claude CLI environments.
 
 **Status**: Documented limitation - no further action required unless Claude CLI framework updates resolve the issue.
+
+## Volume Management
+
+AgentBox uses Docker named volumes to store Claude CLI authentication data persistently. Each project gets its own volume based on the project directory path.
+
+### Normal Usage
+- Volumes are automatically created when you first use AgentBox in a directory
+- Authentication persists across container restarts
+- No manual management needed
+
+### Cleanup (Optional)
+If you want to clean up volumes for old projects:
+
+```bash
+# List all AgentBox volumes
+docker volume ls | grep agentbox-claude
+
+# Remove specific volume (clears auth for that project)
+docker volume rm agentbox-claude-f9fd7e1d1c5c
+
+# Remove all AgentBox volumes (clears all authentication)
+docker volume ls -q | grep agentbox-claude | xargs docker volume rm
+```
+
+**Note**: Removing volumes only affects authentication - your project files remain untouched.
