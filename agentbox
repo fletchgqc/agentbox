@@ -179,12 +179,13 @@ run_container() {
             mount_opts+=(-v "${HOME}/.gitconfig:/home/claude/.gitconfig:ro")
         fi
 
-        # Mount SSH directory for persistent SSH configuration
-        if [[ -d "${HOME}/.ssh" ]]; then
-            mount_opts+=(-v "${HOME}/.ssh:/home/claude/.ssh:rw")
-            log_info "SSH directory mounted with read-write access"
+        # Mount dedicated AgentBox SSH directory
+        local agentbox_ssh="${HOME}/.agentbox/ssh"
+        if [[ -d "${agentbox_ssh}" ]]; then
+            mount_opts+=(-v "${agentbox_ssh}:/home/claude/.ssh:rw")
+            log_info "AgentBox SSH directory mounted (read-write)"
         else
-            log_warning "No .ssh directory found. SSH operations may not work."
+            log_warning "SSH not configured. Run 'agentbox ssh-init' to enable SSH operations."
         fi
 
         # Mount cache directories for package managers
@@ -242,6 +243,8 @@ Options:
     --remove        Remove the container for current project
 
 Commands:
+    ssh-init        Initialize SSH directory for AgentBox
+
     If a command is provided, it will be executed inside the container.
     If no command is provided, an interactive bash shell will be started.
 
@@ -251,6 +254,7 @@ Examples:
     agentbox --list            # List all project containers
     agentbox --cleanup         # Remove all containers
     agentbox --rebuild         # Force rebuild image
+    agentbox ssh-init          # Set up SSH for AgentBox
 
 Each project gets its own persistent container named by project path hash.
 EOF
@@ -278,6 +282,47 @@ cleanup_all_containers() {
     done
 
     log_success "All containers removed"
+}
+
+# Set up dedicated SSH directory for AgentBox
+ssh_setup() {
+    local agentbox_ssh="${HOME}/.agentbox/ssh"
+
+    log_info "Setting up AgentBox SSH directory..."
+    mkdir -p "${agentbox_ssh}"
+    chmod 700 "${agentbox_ssh}"
+
+    # Copy SSH config if it exists
+    if [[ -f "${HOME}/.ssh/config" ]]; then
+        cp "${HOME}/.ssh/config" "${agentbox_ssh}/config"
+        chmod 600 "${agentbox_ssh}/config"
+        log_success "Copied SSH config from ~/.ssh"
+    fi
+
+    # Copy known_hosts if it exists
+    if [[ -f "${HOME}/.ssh/known_hosts" ]]; then
+        cp "${HOME}/.ssh/known_hosts" "${agentbox_ssh}/known_hosts"
+        chmod 600 "${agentbox_ssh}/known_hosts"
+        log_success "Copied known_hosts from ~/.ssh"
+    fi
+
+    # Check if AgentBox key already exists
+    if [[ -f "${agentbox_ssh}/id_ed25519" ]]; then
+        log_info "AgentBox SSH key already exists"
+    else
+        log_info "Generating dedicated SSH key for AgentBox..."
+        ssh-keygen -t ed25519 -f "${agentbox_ssh}/id_ed25519" -C "agentbox@$(hostname)" -N ""
+        log_success "Generated new SSH key: ${agentbox_ssh}/id_ed25519"
+        echo ""
+        log_info "Add this public key to your Git provider:"
+        echo ""
+        cat "${agentbox_ssh}/id_ed25519.pub"
+        echo ""
+        log_info "Alternatively, replace the keys in ${agentbox_ssh}/ with your desired keys"
+    fi
+
+    log_success "SSH setup complete! Directory: ${agentbox_ssh}"
+    log_info "AgentBox will use this directory for all SSH operations."
 }
 
 # Main execution
@@ -315,6 +360,10 @@ main() {
             --remove)
                 remove_container=true
                 shift
+                ;;
+            ssh-init)
+                ssh_setup
+                exit 0
                 ;;
             *)
                 cmd_args+=("$1")
