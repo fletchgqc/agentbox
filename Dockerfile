@@ -61,7 +61,7 @@ ARG GROUP_ID=1000
 ARG USERNAME=claude
 
 RUN groupadd -g ${GROUP_ID} ${USERNAME} || true && \
-    useradd -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/bash ${USERNAME} && \
+    useradd -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/zsh ${USERNAME} && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
     chmod 0440 /etc/sudoers.d/${USERNAME}
 
@@ -174,4 +174,4 @@ USER ${USERNAME}
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["/bin/bash"]
+CMD ["/bin/zsh"]

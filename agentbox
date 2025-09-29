@@ -156,11 +156,11 @@ run_container() {
         # Container exists - check if it's running
         if [[ $(docker inspect "$container_name" --format '{{ .State.Running }}' 2>/dev/null) == "true" ]]; then
             log_info "Attaching to running container..."
-            docker exec -it "$container_name" "${cmd_args[@]:-/bin/bash}"
+            docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
         else
             log_info "Starting existing container..."
             docker start "$container_name" &> /dev/null
-            docker exec -it "$container_name" "${cmd_args[@]:-/bin/bash}"
+            docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
         fi
     else
         # Create new container
@@ -222,7 +222,7 @@ run_container() {
         done
 
         # Now exec into it
-        docker exec -it "$container_name" "${cmd_args[@]:-/bin/bash}"
+        docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
     fi
 }
 
