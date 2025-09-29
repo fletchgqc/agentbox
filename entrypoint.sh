@@ -6,6 +6,12 @@ set -e
 # Ensure proper PATH
 export PATH="$HOME/.local/bin:$PATH"
 
+# Source NVM if available
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+    export NVM_DIR="$HOME/.nvm"
+    source "$NVM_DIR/nvm.sh"
+fi
+
 # Source SDKMAN if available
 if [ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
     source "$HOME/.sdkman/bin/sdkman-init.sh"
