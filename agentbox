@@ -1,0 +1,388 @@
+#!/usr/bin/env bash
+# AgentBox - Simplified Docker environment for Claude development
+# Automatically rebuilds when Dockerfile changes and manages per-project containers
+
+set -euo pipefail
+
+# Configuration
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly DOCKERFILE_PATH="${SCRIPT_DIR}/Dockerfile"
+readonly ENTRYPOINT_PATH="${SCRIPT_DIR}/entrypoint.sh"
+readonly IMAGE_NAME="agentbox:latest"
+readonly CONTAINER_PREFIX="agentbox"
+
+# Colors for output
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
+readonly NC='\033[0m' # No Color
+
+# Helper functions
+log_info() { echo -e "${BLUE}ℹ${NC}  $1"; }
+log_success() { echo -e "${GREEN}✅${NC} $1"; }
+log_warning() { echo -e "${YELLOW}⚠${NC}  $1"; }
+log_error() { echo -e "${RED}❌${NC} $1" >&2; }
+log_build() { echo -e "${CYAN}🔨${NC} $1"; }
+
+# Check if Docker is installed and running
+check_docker() {
+    if ! command -v docker &> /dev/null; then
+        log_error "Docker is not installed. Please install Docker first."
+        exit 1
+    fi
+
+    if ! docker info &> /dev/null; then
+        log_error "Docker daemon is not running. Please start Docker."
+        exit 1
+    fi
+}
+
+# Calculate hash for a file
+calculate_hash() {
+    local file="$1"
+    if [[ -f "$file" ]]; then
+        sha256sum "$file" | cut -d' ' -f1
+    else
+        echo "none"
+    fi
+}
+
+# Get container name for current project
+get_container_name() {
+    local project_dir="$(pwd)"
+    local project_hash=$(echo -n "$project_dir" | sha256sum | cut -c1-12)
+    echo "${CONTAINER_PREFIX}-${project_hash}"
+}
+
+# Check if image needs rebuild
+needs_rebuild() {
+    # Calculate current Dockerfile and entrypoint hashes
+    local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
+    local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
+    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+
+    # Check if image exists
+    if ! docker image inspect "$IMAGE_NAME" &> /dev/null; then
+        return 0  # Needs rebuild - image doesn't exist
+    fi
+
+    # Get stored hash from image
+    local stored_hash=$(docker inspect "$IMAGE_NAME" \
+        --format '{{ index .Config.Labels "agentbox.hash" }}' 2>/dev/null || echo "none")
+
+    # Compare hashes
+    if [[ "$combined_hash" != "$stored_hash" ]]; then
+        return 0  # Needs rebuild
+    fi
+
+    return 1  # No rebuild needed
+}
+
+# Build Docker image
+build_image() {
+    local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
+    local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
+    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+
+    log_build "Building AgentBox image (this may take a few minutes on first run)..."
+
+    # Get current user/group IDs
+    local user_id=$(id -u)
+    local group_id=$(id -g)
+
+    # Build with progress output
+    if docker build \
+        --build-arg USER_ID="${user_id}" \
+        --build-arg GROUP_ID="${group_id}" \
+        --build-arg USERNAME="claude" \
+        --label "agentbox.hash=${combined_hash}" \
+        --label "agentbox.version=1.0.0" \
+        --label "agentbox.built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        -t "$IMAGE_NAME" \
+        "$SCRIPT_DIR" ; then
+        log_success "Image built successfully!"
+        return 0
+    else
+        log_error "Failed to build image"
+        return 1
+    fi
+}
+
+# Cleanup old containers using outdated image
+cleanup_old_containers() {
+    log_info "Checking for containers using outdated image..."
+
+    # Get the current image ID
+    local current_image_id=$(docker inspect "$IMAGE_NAME" --format '{{ .Id }}' 2>/dev/null || echo "none")
+
+    if [[ "$current_image_id" == "none" ]]; then
+        return
+    fi
+
+    # Find all agentbox containers
+    local containers=$(docker ps -a --format '{{.Names}}' | grep "^${CONTAINER_PREFIX}-" || true)
+
+    if [[ -z "$containers" ]]; then
+        return
+    fi
+
+    local cleaned_count=0
+
+    for container in $containers; do
+        local container_image_id=$(docker inspect "$container" --format '{{ .Image }}' 2>/dev/null || echo "none")
+
+        if [[ "$container_image_id" != "$current_image_id" ]]; then
+            log_warning "Removing outdated container: $container"
+            docker rm -f "$container" &> /dev/null || true
+            ((cleaned_count++))
+        fi
+    done
+
+    if [[ $cleaned_count -gt 0 ]]; then
+        log_success "Cleaned up $cleaned_count outdated container(s)"
+    fi
+}
+
+# Run or attach to container
+run_container() {
+    local container_name="$1"
+    shift
+    local cmd_args=("$@")
+
+    # Check if container exists
+    if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        # Container exists - check if it's running
+        if [[ $(docker inspect "$container_name" --format '{{ .State.Running }}' 2>/dev/null) == "true" ]]; then
+            log_info "Attaching to running container..."
+            docker exec -it "$container_name" "${cmd_args[@]:-/bin/bash}"
+        else
+            log_info "Starting existing container..."
+            docker start "$container_name" &> /dev/null
+            docker exec -it "$container_name" "${cmd_args[@]:-/bin/bash}"
+        fi
+    else
+        # Create new container
+        local project_dir="$(pwd)"
+        local project_name="$(basename "$project_dir")"
+
+        log_success "Creating new container for: $project_name"
+
+        # Prepare mount options
+        local mount_opts=(
+            -v "${project_dir}:/workspace:z"
+        )
+
+        # Mount .gitconfig if it exists
+        if [[ -f "${HOME}/.gitconfig" ]]; then
+            mount_opts+=(-v "${HOME}/.gitconfig:/home/claude/.gitconfig:ro")
+        fi
+
+        # Mount SSH directory for persistent SSH configuration
+        if [[ -d "${HOME}/.ssh" ]]; then
+            mount_opts+=(-v "${HOME}/.ssh:/home/claude/.ssh:rw")
+            log_info "SSH directory mounted with read-write access"
+        else
+            log_warning "No .ssh directory found. SSH operations may not work."
+        fi
+
+        # Mount cache directories for package managers
+        local cache_dir="${HOME}/.cache/agentbox/${container_name}"
+        mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
+
+        mount_opts+=(
+            -v "${cache_dir}/npm:/home/claude/.npm"
+            -v "${cache_dir}/pip:/home/claude/.cache/pip"
+            -v "${cache_dir}/maven:/home/claude/.m2"
+            -v "${cache_dir}/gradle:/home/claude/.gradle"
+        )
+
+        # Run container
+        docker run -d \
+            --name "$container_name" \
+            --hostname "agentbox-${project_name}" \
+            "${mount_opts[@]}" \
+            -w /workspace \
+            --init \
+            "$IMAGE_NAME" \
+            tail -f /dev/null &> /dev/null
+
+        # Wait for container to be ready
+        local max_wait=10
+        local waited=0
+        while ! docker exec "$container_name" true 2>/dev/null; do
+            sleep 0.1
+            ((waited++))
+            if [[ $waited -gt $max_wait ]]; then
+                log_error "Container failed to start properly"
+                exit 1
+            fi
+        done
+
+        # Now exec into it
+        docker exec -it "$container_name" "${cmd_args[@]:-/bin/bash}"
+    fi
+}
+
+# Show help
+show_help() {
+    cat << EOF
+AgentBox - Simplified Docker environment for Claude development
+
+Usage:
+    agentbox [OPTIONS] [COMMAND]
+
+Options:
+    -h, --help      Show this help message
+    -l, --list      List all agentbox containers
+    -c, --cleanup   Remove all agentbox containers
+    -r, --rebuild   Force rebuild of the image
+    --stop          Stop the container for current project
+    --remove        Remove the container for current project
+
+Commands:
+    If a command is provided, it will be executed inside the container.
+    If no command is provided, an interactive bash shell will be started.
+
+Examples:
+    agentbox                    # Start/attach to container for current project
+    agentbox python script.py   # Run Python script in container
+    agentbox --list            # List all project containers
+    agentbox --cleanup         # Remove all containers
+    agentbox --rebuild         # Force rebuild image
+
+Each project gets its own persistent container named by project path hash.
+EOF
+}
+
+# List all agentbox containers
+list_containers() {
+    log_info "AgentBox containers:"
+    docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.CreatedAt}}" | grep "${CONTAINER_PREFIX}-" || echo "  No containers found"
+}
+
+# Remove all agentbox containers
+cleanup_all_containers() {
+    log_warning "Removing all AgentBox containers..."
+    local containers=$(docker ps -a --format '{{.Names}}' | grep "^${CONTAINER_PREFIX}-" || true)
+
+    if [[ -z "$containers" ]]; then
+        log_info "No containers to remove"
+        return
+    fi
+
+    echo "$containers" | while read -r container; do
+        log_info "Removing: $container"
+        docker rm -f "$container" &> /dev/null || true
+    done
+
+    log_success "All containers removed"
+}
+
+# Main execution
+main() {
+    # Parse arguments
+    local force_rebuild=false
+    local show_list=false
+    local cleanup_all=false
+    local stop_container=false
+    local remove_container=false
+    local cmd_args=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -l|--list)
+                show_list=true
+                shift
+                ;;
+            -c|--cleanup)
+                cleanup_all=true
+                shift
+                ;;
+            -r|--rebuild)
+                force_rebuild=true
+                shift
+                ;;
+            --stop)
+                stop_container=true
+                shift
+                ;;
+            --remove)
+                remove_container=true
+                shift
+                ;;
+            *)
+                cmd_args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # Check Docker
+    check_docker
+
+    # Handle special commands
+    if [[ "$show_list" == "true" ]]; then
+        list_containers
+        exit 0
+    fi
+
+    if [[ "$cleanup_all" == "true" ]]; then
+        cleanup_all_containers
+        exit 0
+    fi
+
+    # Get container name for current project
+    local container_name=$(get_container_name)
+
+    # Handle stop/remove for current project
+    if [[ "$stop_container" == "true" ]]; then
+        if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+            log_info "Stopping container: $container_name"
+            docker stop "$container_name" &> /dev/null
+            log_success "Container stopped"
+        else
+            log_info "No container for this project"
+        fi
+        exit 0
+    fi
+
+    if [[ "$remove_container" == "true" ]]; then
+        if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
+            log_warning "Removing container: $container_name"
+            docker rm -f "$container_name" &> /dev/null
+            log_success "Container removed"
+        else
+            log_info "No container for this project"
+        fi
+        exit 0
+    fi
+
+    # Check if rebuild is needed or forced
+    if [[ "$force_rebuild" == "true" ]] || needs_rebuild; then
+        if [[ "$force_rebuild" == "true" ]]; then
+            log_info "Forcing image rebuild..."
+        else
+            log_info "Dockerfile or entrypoint changed, rebuilding automatically..."
+        fi
+
+        if ! build_image; then
+            log_error "Build failed!"
+            exit 1
+        fi
+
+        # Clean up containers using old image
+        cleanup_old_containers
+    fi
+
+    # Run or attach to container
+    run_container "$container_name" "${cmd_args[@]}"
+}
+
+# Run main function
+main "$@"
