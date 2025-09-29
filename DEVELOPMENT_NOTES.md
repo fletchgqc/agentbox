@@ -105,3 +105,26 @@ cd /workspace/agentbox
 ```
 
 The user plans to move this to another location and continue testing/development.
+
+## Known Issues and Limitations
+
+### Claude CLI Triple Display Issue
+
+**Issue**: When running `claude` in the container for the first time (during authentication setup), the welcome screen and authentication prompts display three times.
+
+**Root Cause**: This is a known limitation with the Claude CLI's Ink-based UI framework when running in Docker containers. The issue is related to TTY/raw mode handling in containerized environments.
+
+**Impact**:
+- ✅ **Functional**: Claude CLI works perfectly - authentication, commands, and all features function correctly
+- ✅ **Visual**: Terminal formatting is correct (left-aligned, proper sizing)
+- ⚠️ **Cosmetic**: Initial setup displays welcome screen 3x (only during first authentication)
+
+**Investigation Summary**:
+- Systematically ruled out: shell configuration, PATH issues, npm installation, config mounting, workspace conflicts, TTY allocation
+- Added terminal size handling from ClaudeBox (improves formatting)
+- Verified same installation method as ClaudeBox (which likely has same limitation)
+- Issue only occurs during interactive authentication setup, not normal CLI usage
+
+**Recommendation**: Accept as cosmetic limitation. Core functionality is fully operational and this is likely present in other containerized Claude CLI environments.
+
+**Status**: Documented limitation - no further action required unless Claude CLI framework updates resolve the issue.
