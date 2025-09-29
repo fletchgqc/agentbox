@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # AgentBox - Simplified Docker environment for Claude development
-# Automatically rebuilds when Dockerfile changes and manages per-project containers
+# Automatically rebuilds when Dockerfile changes and uses ephemeral containers with persistent caches
 
 set -euo pipefail
 
@@ -145,7 +145,7 @@ cleanup_old_containers() {
     fi
 }
 
-# Run or attach to container
+# Run container with --rm (ephemeral)
 run_container() {
     local container_name="$1"
     shift
@@ -164,140 +164,88 @@ run_container() {
     fi
 
     local cmd_args=("$@")
+    local project_dir="$(pwd)"
+    local project_name="$(basename "$project_dir")"
 
-    # Check if container exists
-    if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
-        # Container exists - check if it's running
-        if [[ $(docker inspect "$container_name" --format '{{ .State.Running }}' 2>/dev/null) == "true" ]]; then
-            if [[ "$admin_mode" == "true" ]]; then
-                log_info "Attaching to running container (admin shell)..."
-            else
-                log_info "Attaching to running container..."
-            fi
-            if [[ "$shell_mode" == "true" ]]; then
-                if [[ "$admin_mode" == "true" ]]; then
-                    docker exec -it "$container_name" bash -c "echo '🔒 Admin shell - sudo access enabled' && ${cmd_args[*]:-/bin/zsh}"
-                else
-                    docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
-                fi
-            else
-                # Run claude through zsh to get proper environment
-                docker exec -it "$container_name" zsh -c "source ~/.zshrc && ${cmd_args[*]:-claude}"
-            fi
+    if [[ "$admin_mode" == "true" ]]; then
+        log_success "Starting container for: $project_name (admin shell)"
+    else
+        log_success "Starting container for: $project_name"
+    fi
+
+    # Prepare mount options
+    local mount_opts=(
+        -v "${project_dir}:/workspace:z"
+    )
+
+    # Mount .gitconfig if it exists
+    if [[ -f "${HOME}/.gitconfig" ]]; then
+        mount_opts+=(-v "${HOME}/.gitconfig:/home/claude/.gitconfig:ro")
+    fi
+
+    # Mount dedicated AgentBox SSH directory
+    local agentbox_ssh="${HOME}/.agentbox/ssh"
+    if [[ -d "${agentbox_ssh}" ]]; then
+        mount_opts+=(-v "${agentbox_ssh}:/home/claude/.ssh:rw")
+        log_info "AgentBox SSH directory mounted (read-write)"
+    else
+        log_warning "SSH not configured. Run 'agentbox ssh-init' to enable SSH operations."
+    fi
+
+    # Mount cache directories for package managers
+    local cache_dir="${HOME}/.cache/agentbox/${container_name}"
+    mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
+
+    mount_opts+=(
+        -v "${cache_dir}/npm:/home/claude/.npm"
+        -v "${cache_dir}/pip:/home/claude/.cache/pip"
+        -v "${cache_dir}/maven:/home/claude/.m2"
+        -v "${cache_dir}/gradle:/home/claude/.gradle"
+    )
+
+    # Mount per-project persistent data
+    local project_data_dir="${HOME}/.agentbox/projects/${container_name}"
+    local history_dir="${project_data_dir}/history"
+    mkdir -p "${history_dir}"
+
+    # Create history files if they don't exist
+    touch "${history_dir}/zsh_history"
+    touch "${history_dir}/bash_history"
+
+    mount_opts+=(
+        -v "${history_dir}/zsh_history:/home/claude/.zsh_history"
+        -v "${history_dir}/bash_history:/home/claude/.bash_history"
+    )
+
+    # Mount Claude CLI configuration if it exists
+    if [[ -d "${HOME}/.claude" ]]; then
+        # Mount the entire Claude directory as read-write for full functionality
+        mount_opts+=(-v "${HOME}/.claude:/home/claude/.claude:rw")
+        log_info "Claude CLI configuration mounted"
+    fi
+
+    # Prepare the command to run
+    local container_cmd
+    if [[ "$shell_mode" == "true" ]]; then
+        if [[ "$admin_mode" == "true" ]]; then
+            container_cmd=(bash -c "echo '🔒 Admin shell - sudo access enabled' && exec ${cmd_args[*]:-/bin/zsh}")
         else
-            if [[ "$admin_mode" == "true" ]]; then
-                log_info "Starting existing container (admin shell)..."
-            else
-                log_info "Starting existing container..."
-            fi
-            docker start "$container_name" &> /dev/null
-            if [[ "$shell_mode" == "true" ]]; then
-                if [[ "$admin_mode" == "true" ]]; then
-                    docker exec -it "$container_name" bash -c "echo '🔒 Admin shell - sudo access enabled' && ${cmd_args[*]:-/bin/zsh}"
-                else
-                    docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
-                fi
-            else
-                # Run claude through zsh to get proper environment
-                docker exec -it "$container_name" zsh -c "source ~/.zshrc && ${cmd_args[*]:-claude}"
-            fi
+            container_cmd=("${cmd_args[@]:-/bin/zsh}")
         fi
     else
-        # Create new container
-        local project_dir="$(pwd)"
-        local project_name="$(basename "$project_dir")"
-
-        if [[ "$admin_mode" == "true" ]]; then
-            log_success "Creating new container for: $project_name (admin shell)"
-        else
-            log_success "Creating new container for: $project_name"
-        fi
-
-        # Prepare mount options
-        local mount_opts=(
-            -v "${project_dir}:/workspace:z"
-        )
-
-        # Mount .gitconfig if it exists
-        if [[ -f "${HOME}/.gitconfig" ]]; then
-            mount_opts+=(-v "${HOME}/.gitconfig:/home/claude/.gitconfig:ro")
-        fi
-
-        # Mount dedicated AgentBox SSH directory
-        local agentbox_ssh="${HOME}/.agentbox/ssh"
-        if [[ -d "${agentbox_ssh}" ]]; then
-            mount_opts+=(-v "${agentbox_ssh}:/home/claude/.ssh:rw")
-            log_info "AgentBox SSH directory mounted (read-write)"
-        else
-            log_warning "SSH not configured. Run 'agentbox ssh-init' to enable SSH operations."
-        fi
-
-        # Mount cache directories for package managers
-        local cache_dir="${HOME}/.cache/agentbox/${container_name}"
-        mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
-
-        mount_opts+=(
-            -v "${cache_dir}/npm:/home/claude/.npm"
-            -v "${cache_dir}/pip:/home/claude/.cache/pip"
-            -v "${cache_dir}/maven:/home/claude/.m2"
-            -v "${cache_dir}/gradle:/home/claude/.gradle"
-        )
-
-        # Mount per-project persistent data
-        local project_dir="${HOME}/.agentbox/projects/${container_name}"
-        local history_dir="${project_dir}/history"
-        mkdir -p "${history_dir}"
-
-        # Create history files if they don't exist
-        touch "${history_dir}/zsh_history"
-        touch "${history_dir}/bash_history"
-
-        mount_opts+=(
-            -v "${history_dir}/zsh_history:/home/claude/.zsh_history"
-            -v "${history_dir}/bash_history:/home/claude/.bash_history"
-        )
-
-        # Mount Claude CLI configuration if it exists
-        if [[ -d "${HOME}/.claude" ]]; then
-            # Mount the entire Claude directory as read-write for full functionality
-            mount_opts+=(-v "${HOME}/.claude:/home/claude/.claude:rw")
-            log_info "Claude CLI configuration mounted"
-        fi
-
-        # Run container with TTY support
-        docker run -dt \
-            --name "$container_name" \
-            --hostname "agentbox-${project_name}" \
-            "${mount_opts[@]}" \
-            -w /workspace \
-            --init \
-            "$IMAGE_NAME" \
-            tail -f /dev/null &> /dev/null
-
-        # Wait for container to be ready
-        local max_wait=10
-        local waited=0
-        while ! docker exec "$container_name" true 2>/dev/null; do
-            sleep 0.1
-            ((waited++))
-            if [[ $waited -gt $max_wait ]]; then
-                log_error "Container failed to start properly"
-                exit 1
-            fi
-        done
-
-        # Now exec into it
-        if [[ "$shell_mode" == "true" ]]; then
-            if [[ "$admin_mode" == "true" ]]; then
-                docker exec -it "$container_name" bash -c "echo '🔒 Admin shell - sudo access enabled' && ${cmd_args[*]:-/bin/zsh}"
-            else
-                docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
-            fi
-        else
-            # Run claude through zsh to get proper environment
-            docker exec -it "$container_name" zsh -c "source ~/.zshrc && ${cmd_args[*]:-claude}"
-        fi
+        # Run claude through zsh to get proper environment
+        container_cmd=(zsh -c "source ~/.zshrc && exec ${cmd_args[*]:-claude --dangerously-skip-permissions}")
     fi
+
+    # Run ephemeral container with --rm
+    docker run -it --rm \
+        --name "$container_name" \
+        --hostname "agentbox-${project_name}" \
+        "${mount_opts[@]}" \
+        -w /workspace \
+        --init \
+        "$IMAGE_NAME" \
+        "${container_cmd[@]}"
 }
 
 # Show help
@@ -310,11 +258,8 @@ Usage:
 
 Options:
     -h, --help      Show this help message
-    -l, --list      List all agentbox containers
-    -c, --cleanup   Remove all agentbox containers
+    -c, --cleanup   Remove AgentBox image and cached data
     -r, --rebuild   Force rebuild of the image
-    --stop          Stop the container for current project
-    --remove        Remove the container for current project
 
 Commands:
     shell [--admin] Start interactive shell instead of Claude CLI
@@ -330,37 +275,43 @@ Examples:
     agentbox shell              # Start interactive shell instead of Claude
     agentbox shell --admin      # Start admin shell with sudo access
     agentbox python script.py   # Run Python script in container
-    agentbox --list            # List all project containers
-    agentbox --cleanup         # Remove all containers
-    agentbox --rebuild         # Force rebuild image
-    agentbox ssh-init          # Set up SSH for AgentBox
+    agentbox --cleanup          # Remove image and optionally cached data
+    agentbox --rebuild          # Force rebuild image
+    agentbox ssh-init           # Set up SSH for AgentBox
 
-Each project gets its own persistent container named by project path hash.
+Containers are ephemeral and automatically removed when you exit.
+Package caches and shell history persist between sessions.
 EOF
 }
 
-# List all agentbox containers
-list_containers() {
-    log_info "AgentBox containers:"
-    docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.CreatedAt}}" | grep "${CONTAINER_PREFIX}-" || echo "  No containers found"
-}
+# Remove AgentBox images and cached data
+cleanup_all() {
+    log_warning "Removing AgentBox images and cached data..."
 
-# Remove all agentbox containers
-cleanup_all_containers() {
-    log_warning "Removing all AgentBox containers..."
-    local containers=$(docker ps -a --format '{{.Names}}' | grep "^${CONTAINER_PREFIX}-" || true)
-
-    if [[ -z "$containers" ]]; then
-        log_info "No containers to remove"
-        return
+    # Remove AgentBox image
+    if docker image inspect "$IMAGE_NAME" &> /dev/null; then
+        log_info "Removing AgentBox image"
+        docker rmi "$IMAGE_NAME" &> /dev/null || true
     fi
 
-    echo "$containers" | while read -r container; do
-        log_info "Removing: $container"
-        docker rm -f "$container" &> /dev/null || true
-    done
+    # Remove cached data (optional - ask user)
+    local cache_base="${HOME}/.cache/agentbox"
+    local project_base="${HOME}/.agentbox/projects"
 
-    log_success "All containers removed"
+    if [[ -d "$cache_base" ]] || [[ -d "$project_base" ]]; then
+        log_warning "This will also remove cached packages and shell history."
+        echo -n "Remove cached data? (y/N): "
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            [[ -d "$cache_base" ]] && rm -rf "$cache_base"
+            [[ -d "$project_base" ]] && rm -rf "$project_base"
+            log_success "Cached data removed"
+        else
+            log_info "Cached data preserved"
+        fi
+    fi
+
+    log_success "Cleanup complete"
 }
 
 # Set up dedicated SSH directory for AgentBox
@@ -408,10 +359,7 @@ ssh_setup() {
 main() {
     # Parse arguments
     local force_rebuild=false
-    local show_list=false
     local cleanup_all=false
-    local stop_container=false
-    local remove_container=false
     local shell_mode=false
     local admin_mode=false
     local cmd_args=()
@@ -422,24 +370,12 @@ main() {
                 show_help
                 exit 0
                 ;;
-            -l|--list)
-                show_list=true
-                shift
-                ;;
             -c|--cleanup)
                 cleanup_all=true
                 shift
                 ;;
             -r|--rebuild)
                 force_rebuild=true
-                shift
-                ;;
-            --stop)
-                stop_container=true
-                shift
-                ;;
-            --remove)
-                remove_container=true
                 shift
                 ;;
             shell)
@@ -469,41 +405,14 @@ main() {
     check_docker
 
     # Handle special commands
-    if [[ "$show_list" == "true" ]]; then
-        list_containers
-        exit 0
-    fi
-
     if [[ "$cleanup_all" == "true" ]]; then
-        cleanup_all_containers
+        cleanup_all
         exit 0
     fi
 
     # Get container name for current project
     local container_name=$(get_container_name)
 
-    # Handle stop/remove for current project
-    if [[ "$stop_container" == "true" ]]; then
-        if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
-            log_info "Stopping container: $container_name"
-            docker stop "$container_name" &> /dev/null
-            log_success "Container stopped"
-        else
-            log_info "No container for this project"
-        fi
-        exit 0
-    fi
-
-    if [[ "$remove_container" == "true" ]]; then
-        if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
-            log_warning "Removing container: $container_name"
-            docker rm -f "$container_name" &> /dev/null
-            log_success "Container removed"
-        else
-            log_info "No container for this project"
-        fi
-        exit 0
-    fi
 
     # Check if rebuild is needed or forced
     if [[ "$force_rebuild" == "true" ]] || needs_rebuild; then
@@ -518,8 +427,6 @@ main() {
             exit 1
         fi
 
-        # Clean up containers using old image
-        cleanup_old_containers
     fi
 
     # Run or attach to container
