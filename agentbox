@@ -149,25 +149,69 @@ cleanup_old_containers() {
 run_container() {
     local container_name="$1"
     shift
+
+    # Check if first arg is "shell" mode
+    local shell_mode=false
+    local admin_mode=false
+    if [[ "${1:-}" == "shell" ]]; then
+        shell_mode=true
+        shift
+        # Check if next arg is --admin
+        if [[ "${1:-}" == "--admin" ]]; then
+            admin_mode=true
+            shift
+        fi
+    fi
+
     local cmd_args=("$@")
 
     # Check if container exists
     if docker ps -a --format '{{.Names}}' | grep -q "^${container_name}$"; then
         # Container exists - check if it's running
         if [[ $(docker inspect "$container_name" --format '{{ .State.Running }}' 2>/dev/null) == "true" ]]; then
-            log_info "Attaching to running container..."
-            docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
+            if [[ "$admin_mode" == "true" ]]; then
+                log_info "Attaching to running container (admin shell)..."
+            else
+                log_info "Attaching to running container..."
+            fi
+            if [[ "$shell_mode" == "true" ]]; then
+                if [[ "$admin_mode" == "true" ]]; then
+                    docker exec -it "$container_name" bash -c "echo '🔒 Admin shell - sudo access enabled' && ${cmd_args[*]:-/bin/zsh}"
+                else
+                    docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
+                fi
+            else
+                # Run claude through zsh to get proper environment
+                docker exec -it "$container_name" zsh -c "source ~/.zshrc && ${cmd_args[*]:-claude}"
+            fi
         else
-            log_info "Starting existing container..."
+            if [[ "$admin_mode" == "true" ]]; then
+                log_info "Starting existing container (admin shell)..."
+            else
+                log_info "Starting existing container..."
+            fi
             docker start "$container_name" &> /dev/null
-            docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
+            if [[ "$shell_mode" == "true" ]]; then
+                if [[ "$admin_mode" == "true" ]]; then
+                    docker exec -it "$container_name" bash -c "echo '🔒 Admin shell - sudo access enabled' && ${cmd_args[*]:-/bin/zsh}"
+                else
+                    docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
+                fi
+            else
+                # Run claude through zsh to get proper environment
+                docker exec -it "$container_name" zsh -c "source ~/.zshrc && ${cmd_args[*]:-claude}"
+            fi
         fi
     else
         # Create new container
         local project_dir="$(pwd)"
         local project_name="$(basename "$project_dir")"
 
-        log_success "Creating new container for: $project_name"
+        if [[ "$admin_mode" == "true" ]]; then
+            log_success "Creating new container for: $project_name (admin shell)"
+        else
+            log_success "Creating new container for: $project_name"
+        fi
 
         # Prepare mount options
         local mount_opts=(
@@ -243,7 +287,16 @@ run_container() {
         done
 
         # Now exec into it
-        docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
+        if [[ "$shell_mode" == "true" ]]; then
+            if [[ "$admin_mode" == "true" ]]; then
+                docker exec -it "$container_name" bash -c "echo '🔒 Admin shell - sudo access enabled' && ${cmd_args[*]:-/bin/zsh}"
+            else
+                docker exec -it "$container_name" "${cmd_args[@]:-/bin/zsh}"
+            fi
+        else
+            # Run claude through zsh to get proper environment
+            docker exec -it "$container_name" zsh -c "source ~/.zshrc && ${cmd_args[*]:-claude}"
+        fi
     fi
 }
 
@@ -264,13 +317,18 @@ Options:
     --remove        Remove the container for current project
 
 Commands:
+    shell [--admin] Start interactive shell instead of Claude CLI
     ssh-init        Initialize SSH directory for AgentBox
 
-    If a command is provided, it will be executed inside the container.
-    If no command is provided, an interactive bash shell will be started.
+    If no command is provided, Claude CLI will be started automatically.
+    Use 'shell' command to get a shell instead of Claude CLI.
+    Use 'shell --admin' to get a shell with sudo privileges.
+    Other commands will be executed inside the container.
 
 Examples:
-    agentbox                    # Start/attach to container for current project
+    agentbox                    # Start Claude CLI for current project
+    agentbox shell              # Start interactive shell instead of Claude
+    agentbox shell --admin      # Start admin shell with sudo access
     agentbox python script.py   # Run Python script in container
     agentbox --list            # List all project containers
     agentbox --cleanup         # Remove all containers
@@ -354,6 +412,8 @@ main() {
     local cleanup_all=false
     local stop_container=false
     local remove_container=false
+    local shell_mode=false
+    local admin_mode=false
     local cmd_args=()
 
     while [[ $# -gt 0 ]]; do
@@ -381,6 +441,18 @@ main() {
             --remove)
                 remove_container=true
                 shift
+                ;;
+            shell)
+                shell_mode=true
+                shift
+                # Check if next arg is --admin
+                if [[ "${1:-}" == "--admin" ]]; then
+                    admin_mode=true
+                    shift
+                fi
+                # Remaining args become shell commands
+                cmd_args=("$@")
+                break
                 ;;
             ssh-init)
                 ssh_setup
@@ -451,7 +523,15 @@ main() {
     fi
 
     # Run or attach to container
-    run_container "$container_name" "${cmd_args[@]}"
+    if [[ "$shell_mode" == "true" ]]; then
+        if [[ "$admin_mode" == "true" ]]; then
+            run_container "$container_name" "shell" "--admin" "${cmd_args[@]}"
+        else
+            run_container "$container_name" "shell" "${cmd_args[@]}"
+        fi
+    else
+        run_container "$container_name" "${cmd_args[@]}"
+    fi
 }
 
 # Run main function
