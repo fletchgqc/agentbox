@@ -129,6 +129,18 @@ The user plans to move this to another location and continue testing/development
 
 **Status**: Documented limitation - no further action required unless Claude CLI framework updates resolve the issue.
 
+### ZSH History File Permission Issue
+
+**Issue**: When exiting the container shell, users see: `zsh: can't rename /home/claude/.zsh_history.new to $HISTFILE`
+
+**Root Cause**: ZSH history files mounted from host need proper permissions and configuration in containerized environments.
+
+**Status**: Accepted as cosmetic limitation. History persists correctly between sessions, but the error message appears on exit.
+
+**Technical Details**: The issue occurs because host-created files are owned by the host user but accessed by container's claude user (UID 1000). Complex fixes introduced side effects without solving the core cosmetic issue.
+
+**Impact**: ✅ History works correctly - error message is harmless and can be ignored
+
 ## Volume Management
 
 AgentBox uses Docker named volumes to store Claude CLI authentication data persistently. Each project gets its own volume based on the project directory path.
