@@ -82,12 +82,10 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | b
     nvm alias default node && \
     nvm use default
 
-# Setup NVM in shells
+# Setup NVM in bash only (zsh will be set up after oh-my-zsh)
 RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
     echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc && \
-    echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.bashrc && \
-    echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc && \
-    echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.zshrc
+    echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.bashrc
 
 # Install Node.js global packages
 RUN bash -c "source $NVM_DIR/nvm.sh && \
@@ -100,7 +98,9 @@ RUN bash -c "source $NVM_DIR/nvm.sh && \
         nodemon \
         yarn \
         pnpm \
-        @anthropic-ai/claude-code"
+        @anthropic-ai/claude-code && \
+    # Verify Claude CLI installation
+    which claude && claude --version"
 
 # Install SDKMAN for Java toolchain management
 RUN curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
@@ -119,10 +119,13 @@ RUN /home/${USERNAME}/.local/bin/uv tool install black && \
     /home/${USERNAME}/.local/bin/uv tool install poetry && \
     /home/${USERNAME}/.local/bin/uv tool install pipenv
 
-# Install oh-my-zsh for better shell experience
+# Install oh-my-zsh for better shell experience and setup NVM for zsh
 RUN sh -c "$(wget -O- https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended && \
     sed -i 's/ZSH_THEME=".*"/ZSH_THEME="robbyrussell"/' ~/.zshrc && \
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && \
+    echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc && \
+    echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.zshrc && \
+    echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.zshrc
 
 # Configure git
 RUN git config --global init.defaultBranch main && \

@@ -5,7 +5,6 @@ set -e
 
 # Ensure proper PATH
 export PATH="$HOME/.local/bin:$PATH"
-export PATH="$HOME/.nvm/versions/node/$(ls -1 $HOME/.nvm/versions/node | tail -1)/bin:$PATH"
 
 # Source SDKMAN if available
 if [ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
@@ -62,6 +61,7 @@ if [ -t 0 ] && [ -t 1 ]; then
     echo "🐍 Python: $(python3 --version 2>&1 | cut -d' ' -f2) (uv available)"
     echo "🟢 Node.js: $(node --version 2>/dev/null || echo 'not found')"
     echo "☕ Java: $(java -version 2>&1 | head -1 | cut -d'"' -f2 || echo 'not found')"
+    echo "🤖 Claude CLI: $(claude --version 2>/dev/null || echo 'not found - check installation')"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 fi

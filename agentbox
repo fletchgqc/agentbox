@@ -220,8 +220,8 @@ run_container() {
             log_info "Claude CLI configuration mounted"
         fi
 
-        # Run container
-        docker run -d \
+        # Run container with TTY support
+        docker run -dt \
             --name "$container_name" \
             --hostname "agentbox-${project_name}" \
             "${mount_opts[@]}" \
