@@ -342,12 +342,6 @@ ssh_setup() {
     mkdir -p "${agentbox_ssh}"
     chmod 700 "${agentbox_ssh}"
 
-    # Copy SSH config if it exists
-    if [[ -f "${HOME}/.ssh/config" ]]; then
-        cp "${HOME}/.ssh/config" "${agentbox_ssh}/config"
-        chmod 600 "${agentbox_ssh}/config"
-        log_success "Copied SSH config from ~/.ssh"
-    fi
 
     # Copy known_hosts if it exists
     if [[ -f "${HOME}/.ssh/known_hosts" ]]; then

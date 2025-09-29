@@ -34,7 +34,6 @@ if [ -d "/home/claude/.ssh" ]; then
     chmod 644 /home/claude/.ssh/*.pub 2>/dev/null || true
     chmod 644 /home/claude/.ssh/authorized_keys 2>/dev/null || true
     chmod 644 /home/claude/.ssh/known_hosts 2>/dev/null || true
-    chmod 644 /home/claude/.ssh/config 2>/dev/null || true
     echo "✅ SSH directory permissions configured"
 fi
 
