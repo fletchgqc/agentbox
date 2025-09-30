@@ -1,136 +1,124 @@
-# AgentBox Development Notes
+# AgentBox Development Notes (For Agents)
 
-## Context for Future Development
+**Note**: Also read README.md for user-facing features, command usage, and Git authentication setup.
+
+## Technical Context
 
 ### Project Origin
-This is a simplified replacement for ClaudeBox - a complex Docker-based development environment that the user found useful but difficult to maintain. The user wanted a slimmed-down version without profiles, slots, or complex bash abstractions.
+AgentBox is a simplified replacement for ClaudeBox. The user was maintaining patches to ClaudeBox but wanted to stop due to complexity. Key motivations:
+- ClaudeBox has 1000+ users but too many features the user doesn't need
+- Complex slot system and Bash 3.2 compatibility requirements made it hard to maintain
+- Python profile in ClaudeBox was buggy
+- User wanted automatic behavior without prompts
 
-### Key Design Decisions
+### Architecture Decisions
 
-1. **Single Dockerfile**: No profile system - all languages (Python, Node.js, Java, Shell) in one image
-2. **Automatic Rebuilds**: Hash-based detection of Dockerfile/entrypoint changes triggers automatic rebuild
-3. **Per-Project Isolation**: Each project directory gets its own container name (using path hash) - containers are ephemeral with `--rm` but caches persist
-4. **Dedicated SSH Directory**: Uses `~/.agentbox/ssh/` for SSH keys (isolated from main `~/.ssh/` directory)
+1. **Ephemeral Containers**: Containers use `--rm` flag and are destroyed on exit. This differs from ClaudeBox's persistent slot-based containers.
 
-### Current Implementation
+2. **Hash-Based Naming**: Container names use SHA256 hash of project directory path (first 12 chars) to ensure uniqueness and avoid conflicts.
 
-**Core Files:**
-- `Dockerfile` - Unified multi-language image (Python via uv, Node via NVM, Java via SDKMAN)
-- `entrypoint.sh` - Minimal initialization (sets PATH, auto-creates Python venvs)
-- `agentbox` - Main wrapper script with auto-rebuild and container management
+3. **Volume Strategy**: Claude CLI config uses Docker named volumes (not bind mounts) to avoid permission issues. Initialized from `~/.claude` if it exists.
 
-**Key Features Implemented:**
-- Automatic image rebuild when Dockerfile/entrypoint changes (via hash tracking)
-- Ephemeral containers with `--rm` (automatically cleaned up on exit)
-- Package manager cache persistence in `~/.cache/agentbox/<container-name>/`
-- Shell history persistence in `~/.agentbox/projects/<container-name>/history/` (zsh, bash)
-- Claude CLI configuration uses Docker named volumes per project (initialized from `~/.claude` if present)
-- Automatic cleanup of outdated containers after rebuild
-- Dedicated SSH directory mounting from `~/.agentbox/ssh/` (provides isolation from main SSH keys)
-- Support for running multiple projects simultaneously
+4. **SSH Implementation**: Currently mounts `~/.agentbox/ssh/` directory directly (not true SSH agent forwarding). Future improvement could use Docker's `--ssh` flag for better security.
 
-### Architecture Notes
+5. **UID/GID Handling**: Dockerfile builds with host user's UID/GID passed as build args to minimize permission issues, but some remain (see ZSH history issue).
 
-```
-Single Dockerfile → Build once → agentbox:latest image
-                                         ↓
-                    ┌────────────────────┼────────────────────┐
-                    ↓                    ↓                    ↓
-          Container: project1    Container: project2    Container: project3
-          (ephemeral, --rm)      (ephemeral, --rm)      (ephemeral, --rm)
-          Mounts: ~/code/api    Mounts: ~/code/web     Mounts: ~/code/cli
+## Implementation Details
 
-Persistent data (survives container removal):
-  Cache: ~/.cache/agentbox/agentbox-<hash>/
-  History: ~/.agentbox/projects/agentbox-<hash>/history/
-  Claude: Docker volume agentbox-claude-<hash>
-```
+### File Responsibilities
+- `Dockerfile`: Multi-stage build with all language toolchains. Uses `USER claude` (UID 1000)
+- `entrypoint.sh`: Minimal - only sets PATH and creates Python venvs
+- `agentbox`: Main logic - rebuild detection, container lifecycle, mount management
 
-### Migration from ClaudeBox
+### Rebuild Detection
+Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Compares on each run to trigger automatic rebuilds.
 
-The user has been maintaining their own patches to ClaudeBox but wants to stop. This agentbox solution is meant to be:
-- Simpler (4 files vs 20+)
-- More maintainable (no Bash 3.2 compatibility requirements)
-- More predictable (no slot management complexity)
-- Equally functional for their use cases (Python, JavaScript, Java, Shell development)
+### Container Lifecycle
+1. Check Docker daemon
+2. Compare hashes → rebuild if needed
+3. Clean up old containers using outdated image
+4. Run ephemeral container with all mounts
+5. Container removed automatically on exit
 
-### ClaudeBox Comparison
-
-ClaudeBox features not needed in AgentBox:
-- Complex slot system for container management
-- Bash 3.2 compatibility requirements
-- 20+ language profiles (AgentBox uses single unified image)
-- Firewall rules and project isolation modes
-- tmux-based multi-instance communication
-
-### Design Requirements
-
-- Support for Python, JavaScript, Java, and Shell development in single image
-- Independent containers for different project directories
-- Simultaneous container support for multiple projects
-- Automatic behavior without prompts (auto-rebuild on changes)
-- Security isolation (dedicated SSH directory at `~/.agentbox/ssh/`)
-
-
-## To Continue Development
-
-1. The main innovation is the simplicity - resist adding complexity
-4. Keep the automatic rebuild feature as the core value proposition
-
-## Quick Start
-
+### Mount Points
 ```bash
-./agentbox --help        # Show help
-./agentbox               # Start Claude CLI in container
-./agentbox shell         # Start interactive shell
-./agentbox shell --admin # Start shell with sudo privileges
-./agentbox ssh-init      # Set up SSH keys for AgentBox
+/workspace              # Project directory (main mount)
+/home/claude/.ssh       # SSH keys from ~/.agentbox/ssh/
+/home/claude/.gitconfig # Git config (read-only)
+/home/claude/.npm       # NPM cache
+/home/claude/.cache/pip # Pip cache
+/home/claude/.m2        # Maven cache
+/home/claude/.gradle    # Gradle cache
+/home/claude/.zsh_history   # ZSH history
+/home/claude/.bash_history  # Bash history
+/home/claude/.claude    # Claude config (Docker volume)
 ```
 
-## Known Issues and Limitations
+## Testing Status
+- Basic functionality verified (help command, shell mode)
+- Full Docker build/run cycle needs real environment testing
+- Multi-project isolation designed but not stress-tested
+- SSH operations need testing with actual Git repositories
 
-### Claude CLI Triple Display Issue
+## Potential Future Improvements
 
-**Issue**: When running `claude` in the container for the first time (during authentication setup), the welcome screen and authentication prompts display three times.
+1. **True SSH Agent Forwarding**: Replace key mounting with Docker's `--ssh` flag
+2. **Build Cache Optimization**: Better layer ordering for faster rebuilds
+3. **Permission Fixes**: Solve ZSH history permission issue properly
+4. **Debug Mode**: Add verbose logging for troubleshooting
+5. **Config File**: Support `.agentboxrc` for user preferences
+6. **WSL2 Optimizations**: Specific handling for WSL2 environments
 
-**Root Cause**: This is a known limitation with the Claude CLI's Ink-based UI framework when running in Docker containers. The issue is related to TTY/raw mode handling in containerized environments.
+## Known Technical Issues
 
-**Impact**:
-- ✅ **Functional**: Claude CLI works perfectly - authentication, commands, and all features function correctly
-- ✅ **Visual**: Terminal formatting is correct (left-aligned, proper sizing)
-- ⚠️ **Cosmetic**: Initial setup displays welcome screen 3x (only during first authentication)
+### Claude CLI Triple Display
+- **Root Cause**: Ink framework's TTY handling in containers
+- **Attempted Fixes**: Terminal size handling, TTY allocation modes
+- **Status**: Unfixable without Claude CLI framework changes
 
-**Status**: Known cosmetic issue with Ink-based UI in containers. Does not affect functionality.
+### ZSH History Permissions
+- **Root Cause**: Host file ownership (host UID) vs container user (UID 1000)
+- **Attempted Fixes**: Various permission strategies, all had side effects
+- **Status**: Cosmetic issue, functionality works
 
-### ZSH History File Permission Issue
+### Image Size
+Current image is large (~2GB) due to multiple language toolchains. Could optimize with:
+- Multi-stage builds with slimmer final stage
+- Optional language support via build args
+- Better layer caching strategies
 
-**Issue**: When exiting the container shell, users see: `zsh: can't rename /home/claude/.zsh_history.new to $HISTFILE`
+## Development Philosophy
 
-**Root Cause**: Permission mismatch between host-created files and container user (UID 1000).
+1. **Simplicity First**: Resist feature creep. The value is in being simpler than ClaudeBox.
+2. **Automatic Behavior**: Users shouldn't need to think about container management.
+3. **No Prompts**: Everything should work without user interaction (except initial SSH setup).
+4. **Fail Gracefully**: Clear error messages, automatic recovery where possible.
 
-**Impact**: History persists correctly - error message is cosmetic and can be ignored.
+## Command Analysis
 
-## Volume Management
+The `agentbox` script has these key functions:
+- `check_docker()`: Verify Docker daemon is running
+- `calculate_hash()`: SHA256 hash for change detection
+- `needs_rebuild()`: Compare hashes with image label
+- `build_image()`: Docker build with proper args
+- `cleanup_old_containers()`: Remove containers using old images
+- `run_container()`: Main container execution logic
+- `ssh_setup()`: Initialize ~/.agentbox/ssh/ directory
 
-AgentBox uses Docker named volumes to store Claude CLI authentication data persistently. Each project gets its own volume based on the project directory path.
+## Critical Implementation Notes
 
-### Normal Usage
-- Volumes are automatically created when you first use AgentBox in a directory
-- Authentication persists across container restarts
-- No manual management needed
+1. **Never use `-i` flag**: Git commands like `git rebase -i` won't work in non-interactive container context
 
-### Cleanup (Optional)
-If you want to clean up volumes for old projects:
+2. **Path Hashing**: Container names use first 12 chars of SHA256(project_path) - collision risk is negligible
 
-```bash
-# List all AgentBox volumes
-docker volume ls | grep agentbox-claude
+3. **Volume Naming**: `agentbox-claude-<hash>` pattern ensures per-project isolation
 
-# Remove specific volume (clears auth for that project)
-docker volume rm agentbox-claude-f9fd7e1d1c5c
+4. **Shell Mode**: When using `shell` command, execution goes through zsh even for bash (ensures environment is loaded)
 
-# Remove all AgentBox volumes (clears all authentication)
-docker volume ls -q | grep agentbox-claude | xargs docker volume rm
-```
+5. **Admin Mode**: `--admin` flag doesn't actually grant sudo (would need Dockerfile changes) - currently just shows a message
 
-**Note**: Removing volumes only affects authentication - your project files remain untouched.
+## File Count
+- Core files: 3 (Dockerfile, entrypoint.sh, agentbox)
+- Documentation: 2 (README.md, DEVELOPMENT_NOTES.md)
+- Other: .gitignore, LICENSE, CLAUDE.md
+- Total: ~8 files (vs ClaudeBox's 20+)

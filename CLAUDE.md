@@ -1,3 +1,5 @@
+Read @DEVELOPMENT_NOTES.md to understand the project.
+
 Before using any tool directly, check if a specialized sub-agent exists for this task type.
 
 ## Sub-agent delegation checklist
