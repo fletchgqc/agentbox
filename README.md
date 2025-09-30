@@ -172,7 +172,11 @@ During first-time authentication, the Claude CLI welcome screen and the authenti
 ### ZSH History Error
 When exiting the shell, you may see: `zsh: can't rename /home/claude/.zsh_history.new to $HISTFILE`. I'm not sure why this happens but it seems to be cosmetic - history persists correctly between sessions.
 
-## Comparison with ClaudeBox
+## Alternatives
+### Anthropic DevContainer
+Anthropic offers a [devcontainer](https://github.com/anthropics/claude-code/tree/main/.devcontainer) which achieves a similar goal. If you like devcontainers, that's a good option. Unfortunately, I find that devcontainers sometimes have weird bugs, problematic support in IntelliJ/Mac, or they are just more cumbersome to use (try switching to a recent project with a shortcut, for example). I don't want to force people to use a devcontainer if what they really want is safe YOLO-mode isolation - the simpler solution to the problem is just Docker, hence, this project.
+
+### Comparison with ClaudeBox
 AgentBox began as a simplified replacement for [ClaudeBox](https://github.com/RchGrav/claudebox). I liked the ClaudeBox project, but its complexity caused a lot of bugs and I found myself maintaning my own fork with my not-yet-merged PRs. It became easier for me to build something leaner for my own needs. Comparison:
 
 | Feature | AgentBox | ClaudeBox |
