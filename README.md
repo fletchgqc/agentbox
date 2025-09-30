@@ -164,14 +164,6 @@ docker volume ls -q | grep agentbox-claude | xargs docker volume rm
 # Image automatically rebuilds when Dockerfile or entrypoint.sh changes
 ```
 
-## Known Issues
-
-### Claude CLI Triple Display
-During first-time authentication, the Claude CLI welcome screen and the authentication link may display three times. According to Claude, this is a cosmetic issue with the Ink UI framework in containers. It doesn't affect functionality.
-
-### ZSH History Error
-When exiting the shell, you may see: `zsh: can't rename /home/claude/.zsh_history.new to $HISTFILE`. I'm not sure why this happens but it seems to be cosmetic - history persists correctly between sessions.
-
 ## Alternatives
 ### Anthropic DevContainer
 Anthropic offers a [devcontainer](https://github.com/anthropics/claude-code/tree/main/.devcontainer) which achieves a similar goal. If you like devcontainers, that's a good option. Unfortunately, I find that devcontainers sometimes have weird bugs, problematic support in IntelliJ/Mac, or they are just more cumbersome to use (try switching to a recent project with a shortcut, for example). I don't want to force people to use a devcontainer if what they really want is safe YOLO-mode isolation - the simpler solution to the problem is just Docker, hence, this project.
@@ -191,3 +183,8 @@ AgentBox began as a simplified replacement for [ClaudeBox](https://github.com/Rc
 I make no guarantee to support this project in the long term. Feel free to create issues and submit PRs. I like to think that I will attend to them. The project is designed to be understandable enough that if you need specific custom changes, which you may well do, you can fork or just make them locally for yourself. Theoretically you could easily this project to other AI Agents, for example.
 
 If you do contribute, consider that AgentBox is designed to be simple and maintainable. The value of new features will always be weighed against the added complexity.
+
+### Known Issues
+
+#### ZSH History Error
+When exiting the shell, you may see: `zsh: can't rename /home/claude/.zsh_history.new to $HISTFILE`. I'm not sure why this happens but it seems to be cosmetic - history persists correctly between sessions.
