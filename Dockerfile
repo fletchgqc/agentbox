@@ -34,7 +34,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         python3-dev python3-pip python3-venv \
         libssl-dev libffi-dev \
         # Java dependencies
-        default-jdk maven gradle ant \
+        default-jdk maven gradle \
         # Search tools
         ripgrep fd-find && \
     # Setup locale
