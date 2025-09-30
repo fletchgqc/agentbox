@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         # Archive tools
         zip unzip tar gzip bzip2 xz-utils \
         # JSON/YAML tools
-        jq \
+        jq yq \
         # Process management
         procps psmisc \
         # Python build dependencies
