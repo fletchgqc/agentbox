@@ -55,6 +55,16 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Install GitLab CLI
+RUN ARCH=$(dpkg --print-architecture) && \
+    GLAB_VERSION=$(curl -sL "https://gitlab.com/api/v4/projects/34675721/releases/permalink/latest" | sed -n 's/.*"tag_name":"v\?\([^"]*\)".*/\1/p') && \
+    echo "Installing glab version ${GLAB_VERSION} for ${ARCH}" && \
+    curl -fsSL -o /tmp/glab.deb \
+        "https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads/glab_${GLAB_VERSION}_linux_${ARCH}.deb" && \
+    dpkg -i /tmp/glab.deb || apt-get install -f -y && \
+    rm /tmp/glab.deb && \
+    glab --version
+
 # Create non-root user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
