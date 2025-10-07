@@ -23,20 +23,20 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 
 ```bash
 # Show available commands
-./agentbox --help
+agentbox --help
 
 # Start Claude CLI in container (--dangerously-skip-permissions is automatically included)
-./agentbox
+agentbox
 
 # Non-agentbox CLI flags are passed through to claude.
 # For example, to continue the most recent session
-./agentbox -c
+agentbox -c
 
 # Start shell with sudo privileges
-./agentbox shell --admin
+agentbox shell --admin
 
 # Set up SSH keys for AgentBox
-./agentbox ssh-init
+agentbox ssh-init
 ```
 
 ## How It Works
@@ -88,7 +88,7 @@ AgentBox uses a dedicated SSH directory (`~/.agentbox/ssh/`) isolated from your 
 
 ```bash
 # Initialize SSH for AgentBox
-./agentbox ssh-init
+agentbox ssh-init
 ```
 
 This will:
@@ -136,7 +136,7 @@ docker volume rm agentbox-claude-<hash>
 docker volume ls -q | grep agentbox-claude | xargs docker volume rm
 
 # Full cleanup (removes image and optionally cached data)
-./agentbox --cleanup
+agentbox --cleanup
 ```
 
 **Note**: Removing volumes only affects authentication - your project files remain untouched.
@@ -146,24 +146,24 @@ docker volume ls -q | grep agentbox-claude | xargs docker volume rm
 ### Running Commands
 ```bash
 # Run Python scripts
-./agentbox python script.py
+agentbox python script.py
 
 # Run Node.js applications
-./agentbox node app.js
+agentbox node app.js
 
 # Use package managers
-./agentbox npm install
-./agentbox pip install requests
-./agentbox mvn compile
+agentbox npm install
+agentbox pip install requests
+agentbox mvn compile
 ```
 
 ### Rebuild Control
 ```bash
 # Force rebuild the Docker image
-./agentbox --rebuild
-
-# Image automatically rebuilds when Dockerfile or entrypoint.sh changes
+agentbox --rebuild
 ```
+
+The image automatically rebuilds when the Dockerfile or entrypoint.sh changes
 
 ## Alternatives
 ### Anthropic DevContainer
