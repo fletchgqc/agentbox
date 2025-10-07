@@ -25,8 +25,12 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 # Show available commands
 ./agentbox --help
 
-# Start Claude CLI in container
+# Start Claude CLI in container (--dangerously-skip-permissions is automatically included)
 ./agentbox
+
+# Non-agentbox CLI flags are passed through to claude.
+# For example, to continue the most recent session
+./agentbox -c
 
 # Start shell with sudo privileges
 ./agentbox shell --admin

@@ -253,7 +253,12 @@ run_container() {
         fi
     else
         # Run claude through zsh to get proper environment
-        container_cmd=(zsh -c "source ~/.zshrc && exec ${cmd_args[*]:-claude --dangerously-skip-permissions}")
+        # Always include --dangerously-skip-permissions, append any additional flags
+        local claude_cmd="claude --dangerously-skip-permissions"
+        if [[ ${#cmd_args[@]} -gt 0 ]]; then
+            claude_cmd="$claude_cmd ${cmd_args[*]}"
+        fi
+        container_cmd=(zsh -c "source ~/.zshrc && exec $claude_cmd")
     fi
 
     # Check for .env file in project directory and add to docker args
@@ -285,8 +290,8 @@ Usage:
 
 Options:
     -h, --help      Show this help message
-    -c, --cleanup   Remove AgentBox image and cached data
-    -r, --rebuild   Force rebuild of the image
+    --cleanup       Remove AgentBox image and cached data
+    --rebuild       Force rebuild of the image
 
 Commands:
     shell [--admin] Start interactive shell instead of Claude CLI
@@ -391,11 +396,11 @@ main() {
                 show_help
                 exit 0
                 ;;
-            -c|--cleanup)
+            --cleanup)
                 cleanup_all=true
                 shift
                 ;;
-            -r|--rebuild)
+            --rebuild)
                 force_rebuild=true
                 shift
                 ;;
