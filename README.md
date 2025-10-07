@@ -143,18 +143,12 @@ agentbox --cleanup
 
 ## Advanced Usage
 
-### Running Commands
+### Running One-Off Commands
+If you need to run a single command in the containerized environment without starting Claude CLI or an interactive shell:
+
 ```bash
-# Run Python scripts
-agentbox python script.py
-
-# Run Node.js applications
-agentbox node app.js
-
-# Use package managers
-agentbox npm install
-agentbox pip install requests
-agentbox mvn compile
+# Run any command
+agentbox npm test
 ```
 
 ### Rebuild Control
