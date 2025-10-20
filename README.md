@@ -1,3 +1,5 @@
+![AgentBox Logo](media/logo-image-only-200.png)
+
 # AgentBox
 
 A Docker-based development environment for running Claude CLI in a more safe, isolated fashion. This makes it less dangerous to use YOLO mode (`--dangerously-skip-permissions`), which is, in my opinion, the only way to use AI agents.
