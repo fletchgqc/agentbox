@@ -1,4 +1,4 @@
-![AgentBox Logo](media/logo-image-only-200.png)
+![AgentBox Logo](media/logo-image-only-150.png)
 
 # AgentBox
 
