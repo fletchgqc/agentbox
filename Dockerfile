@@ -79,8 +79,13 @@ RUN groupadd -g ${GROUP_ID} ${USERNAME} || true && \
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
+# Set HOME and PATH environment variables for proper tool installation
+ENV HOME=/home/${USERNAME}
+ENV PATH="$HOME/.local/bin:$PATH"
+
 # Install uv for Python package management
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+RUN mkdir -p "$HOME/.local/bin" && \
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && \
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 
