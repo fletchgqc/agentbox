@@ -1,0 +1,4 @@
+# Ensure shell scripts always use LF line endings
+# This prevents "exec format error" in Linux containers when files are checked out on Windows
+*.sh text eol=lf
+agentbox text eol=lf
