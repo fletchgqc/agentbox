@@ -1,0 +1,7 @@
+# Enforce LF line endings for shell scripts to prevent Windows CRLF issues
+# This prevents the "exec /usr/local/bin/entrypoint.sh: no such file or directory" error
+*.sh text eol=lf
+agentbox text eol=lf
+
+# Default behavior for all other files
+* text=auto

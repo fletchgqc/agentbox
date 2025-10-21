@@ -6,8 +6,8 @@ set -euo pipefail
 
 # Configuration
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly PROJECT_DIR="$(pwd)"
-readonly PROJECT_NAME="$(basename "$PROJECT_DIR")"
+readonly PROJECT_DIR_RAW="$(pwd)"
+readonly PROJECT_NAME="$(basename "$PROJECT_DIR_RAW")"
 readonly DOCKERFILE_PATH="${SCRIPT_DIR}/Dockerfile"
 readonly ENTRYPOINT_PATH="${SCRIPT_DIR}/entrypoint.sh"
 readonly IMAGE_NAME="agentbox:latest"
@@ -27,6 +27,27 @@ log_success() { echo -e "${GREEN}✅${NC} $1"; }
 log_warning() { echo -e "${YELLOW}⚠${NC}  $1"; }
 log_error() { echo -e "${RED}❌${NC} $1" >&2; }
 log_build() { echo -e "${CYAN}🔨${NC} $1"; }
+
+# Normalize Windows paths for Docker
+# Converts Windows-style paths (C:\, D:\) to Docker-compatible paths (/c/, /d/)
+normalize_path() {
+    local path="$1"
+
+    # Check if we're on Windows (Git Bash, WSL, or similar)
+    # Convert Windows drive letter paths (C:, D:, etc.) to Docker format
+    if [[ "$path" =~ ^([A-Za-z]):(.*)$ ]]; then
+        local drive="${BASH_REMATCH[1],,}"  # lowercase the drive letter
+        local rest="${BASH_REMATCH[2]}"
+        # Convert backslashes to forward slashes
+        rest="${rest//\\//}"
+        echo "/${drive}${rest}"
+    else
+        echo "$path"
+    fi
+}
+
+# Normalize PROJECT_DIR for Windows compatibility
+readonly PROJECT_DIR="$(normalize_path "$PROJECT_DIR_RAW")"
 
 # Check if Docker is installed and running
 check_docker() {
@@ -152,6 +173,9 @@ run_container() {
     local container_name="$1"
     shift
 
+    # Normalize HOME path for Windows compatibility
+    local HOME_NORMALIZED="$(normalize_path "$HOME")"
+
     # Check if first arg is "shell" mode
     local shell_mode=false
     local admin_mode=false
@@ -180,13 +204,13 @@ run_container() {
 
     # Mount .gitconfig if it exists
     if [[ -f "${HOME}/.gitconfig" ]]; then
-        mount_opts+=(-v "${HOME}/.gitconfig:/home/claude/.gitconfig:ro")
+        mount_opts+=(-v "${HOME_NORMALIZED}/.gitconfig:/home/claude/.gitconfig:ro")
     fi
 
     # Mount dedicated AgentBox SSH directory
     local agentbox_ssh="${HOME}/.agentbox/ssh"
     if [[ -d "${agentbox_ssh}" ]]; then
-        mount_opts+=(-v "${agentbox_ssh}:/home/claude/.ssh:rw")
+        mount_opts+=(-v "${HOME_NORMALIZED}/.agentbox/ssh:/home/claude/.ssh:rw")
         log_info "AgentBox SSH directory mounted (read-write)"
     else
         log_warning "SSH not configured. Run 'agentbox ssh-init' to enable SSH operations."
@@ -197,10 +221,10 @@ run_container() {
     mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
 
     mount_opts+=(
-        -v "${cache_dir}/npm:/home/claude/.npm"
-        -v "${cache_dir}/pip:/home/claude/.cache/pip"
-        -v "${cache_dir}/maven:/home/claude/.m2"
-        -v "${cache_dir}/gradle:/home/claude/.gradle"
+        -v "${HOME_NORMALIZED}/.cache/agentbox/${container_name}/npm:/home/claude/.npm"
+        -v "${HOME_NORMALIZED}/.cache/agentbox/${container_name}/pip:/home/claude/.cache/pip"
+        -v "${HOME_NORMALIZED}/.cache/agentbox/${container_name}/maven:/home/claude/.m2"
+        -v "${HOME_NORMALIZED}/.cache/agentbox/${container_name}/gradle:/home/claude/.gradle"
     )
 
     # Mount per-project persistent data
@@ -213,8 +237,8 @@ run_container() {
     touch "${history_dir}/bash_history"
 
     mount_opts+=(
-        -v "${history_dir}/zsh_history:/home/claude/.zsh_history"
-        -v "${history_dir}/bash_history:/home/claude/.bash_history"
+        -v "${HOME_NORMALIZED}/.agentbox/projects/${container_name}/history/zsh_history:/home/claude/.zsh_history"
+        -v "${HOME_NORMALIZED}/.agentbox/projects/${container_name}/history/bash_history:/home/claude/.bash_history"
     )
 
     # Use Docker named volume for Claude config (like Anthropic's devcontainer)
@@ -229,7 +253,7 @@ run_container() {
         if [[ -d "${HOME}/.claude" ]]; then
             # Use a temporary container to copy data to the volume
             docker run --rm \
-                -v "${HOME}/.claude:/source:ro" \
+                -v "${HOME_NORMALIZED}/.claude:/source:ro" \
                 -v "${claude_volume_name}:/dest" \
                 "$IMAGE_NAME" \
                 sh -c "cp -r /source/* /dest/ 2>/dev/null || true"
@@ -262,8 +286,10 @@ run_container() {
     fi
 
     # Check for .env file in project directory and add to docker args
+    # Note: We check using PROJECT_DIR_RAW (original path) since we're checking the host filesystem
+    # but pass the normalized path to Docker
     local env_file_args=()
-    if [[ -f "$PROJECT_DIR/.env" ]]; then
+    if [[ -f "$PROJECT_DIR_RAW/.env" ]]; then
         env_file_args+=(--env-file "$PROJECT_DIR/.env")
         log_info ".env file found and will be loaded into container"
     fi
