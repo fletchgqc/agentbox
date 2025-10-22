@@ -218,13 +218,14 @@ run_container() {
 
     # Mount cache directories for package managers
     local cache_dir="${HOME}/.cache/agentbox/${container_name}"
+    local cache_dir_normalized="$(normalize_path "$cache_dir")"
     mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
 
     mount_opts+=(
-        -v "${HOME_NORMALIZED}/.cache/agentbox/${container_name}/npm:/home/claude/.npm"
-        -v "${HOME_NORMALIZED}/.cache/agentbox/${container_name}/pip:/home/claude/.cache/pip"
-        -v "${HOME_NORMALIZED}/.cache/agentbox/${container_name}/maven:/home/claude/.m2"
-        -v "${HOME_NORMALIZED}/.cache/agentbox/${container_name}/gradle:/home/claude/.gradle"
+        -v "${cache_dir_normalized}/npm:/home/claude/.npm"
+        -v "${cache_dir_normalized}/pip:/home/claude/.cache/pip"
+        -v "${cache_dir_normalized}/maven:/home/claude/.m2"
+        -v "${cache_dir_normalized}/gradle:/home/claude/.gradle"
     )
 
     # Mount per-project persistent data
@@ -287,10 +288,10 @@ run_container() {
 
     # Check for .env file in project directory and add to docker args
     # Note: We check using PROJECT_DIR_RAW (original path) since we're checking the host filesystem
-    # but pass the normalized path to Docker
+    # and must pass the same original path to Docker's --env-file flag
     local env_file_args=()
     if [[ -f "$PROJECT_DIR_RAW/.env" ]]; then
-        env_file_args+=(--env-file "$PROJECT_DIR/.env")
+        env_file_args+=(--env-file "$PROJECT_DIR_RAW/.env")
         log_info ".env file found and will be loaded into container"
     fi
 
