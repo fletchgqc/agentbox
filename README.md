@@ -16,10 +16,28 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 
 ## Installation
 
+### Linux and macOS
+
 1. Clone AgentBox to your preferred location
 2. Ensure Docker is installed and running
 3. Make the script executable: `chmod +x agentbox`
 4. Optionally add to your PATH for global access
+
+### Windows
+
+AgentBox works on Windows with either:
+- **WSL2** (recommended): Install [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install) and follow the Linux instructions above
+- **Git Bash**: Use [Git for Windows](https://git-scm.com/download/win) which includes Git Bash
+
+**Important for Windows users:**
+- Ensure Docker Desktop is installed and running
+- The script automatically handles Windows path conversions (e.g., `C:\Users\...` → `/c/Users/...`)
+- Line endings are enforced to LF (Linux format) via `.gitattributes` to prevent container errors
+- If you cloned the repo before this fix, you may need to refresh line endings:
+  ```bash
+  git rm --cached -r .
+  git reset --hard
+  ```
 
 ## Quick Start
 
