@@ -101,6 +101,43 @@ This will:
 ### Environment Variables
 If a `.env` file exists in your project directory, the environment variables defined there will automatically be loaded into the container.
 
+## MCP Server Configuration
+
+AgentBox supports automatic MCP (Model Context Protocol) server configuration using a project-level `.mcp.json` file. This enables:
+- **Team collaboration**: Share MCP configurations via version control
+- **Project portability**: MCP servers configure automatically when teammates start the container
+- **Zero setup**: No need to manually run `claude mcp add` after container recreation
+
+### Setting Up Project-Level MCP Servers
+
+Create a `.mcp.json` file in your project root:
+
+```json
+{
+  "mcpServers": {
+    "memory-keeper": {
+      "command": "npx",
+      "args": ["mcp-memory-keeper"],
+      "env": {}
+    },
+    "custom-server": {
+      "command": "python",
+      "args": ["-m", "my_mcp_server"],
+      "env": {
+        "API_KEY": "your-key-here"
+      }
+    }
+  }
+}
+```
+
+When you start AgentBox, it will:
+1. Check if `.mcp.json` exists in your project
+2. Automatically configure any MCP servers not already set up
+3. Skip servers that are already configured (idempotent)
+
+**Note**: Environment variables in `.mcp.json` support expansion with `${VAR}` or `${VAR:-default}` syntax. You can reference variables from your project's `.env` file.
+
 ## Data Persistence
 
 ### Package Caches
@@ -120,6 +157,8 @@ Authentication data is stored in Docker named volumes (`agentbox-claude-<hash>`)
 - Per-project Claude CLI configuration
 - Persistent authentication across container restarts
 - Isolation between different projects
+
+**Note**: MCP servers configured via `claude mcp add` are stored in the Docker volume and persist across container restarts. However, using project-level `.mcp.json` is recommended for team collaboration.
 
 ## Volume Management
 

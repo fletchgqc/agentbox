@@ -54,6 +54,16 @@ Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Com
 /home/claude/.claude    # Claude config (Docker volume)
 ```
 
+### MCP Server Configuration
+AgentBox supports automatic MCP server configuration from project-level `.mcp.json` files:
+- **Location**: `/workspace/.mcp.json` (project root)
+- **Detection**: Entrypoint script checks for `.mcp.json` on every container start
+- **Idempotency**: Only adds servers that aren't already configured
+- **Format**: Standard Claude Code MCP JSON format with `mcpServers` object
+- **Requirements**: Requires `jq` to be installed in the container (already included)
+- **Scope**: Uses `--scope local` which stores config in Docker volume
+- **Persistence**: MCP configs stored in Docker volume survive container deletion
+
 ## Testing Status
 - Basic functionality verified (help command, shell mode)
 - Full Docker build/run cycle needs real environment testing
