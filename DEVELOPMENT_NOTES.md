@@ -52,6 +52,7 @@ Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Com
 /home/claude/.zsh_history   # ZSH history
 /home/claude/.bash_history  # Bash history
 /home/claude/.claude    # Claude config (Docker volume)
+/home/claude/mcp-data   # MCP server data (Docker volume, per-project)
 ```
 
 ### MCP Server Configuration

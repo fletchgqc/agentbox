@@ -245,6 +245,18 @@ run_container() {
 
     log_info "Claude CLI configuration mounted"
 
+    # Use Docker named volume for MCP data
+    local mcp_volume_name="agentbox-mcp-${container_name#agentbox-}"
+
+    # Check if volume exists, create if needed
+    if ! docker volume inspect "$mcp_volume_name" &>/dev/null; then
+        log_info "Creating MCP data volume for persistent storage"
+        docker volume create "$mcp_volume_name" &>/dev/null
+    fi
+
+    mount_opts+=(-v "${mcp_volume_name}:/home/claude/mcp-data")
+    log_info "MCP data directory mounted (memory-keeper database will persist)"
+
     # Prepare the command to run
     local container_cmd
     if [[ "$shell_mode" == "true" ]]; then

@@ -3,7 +3,9 @@
     "memory-keeper": {
       "command": "npx",
       "args": ["mcp-memory-keeper"],
-      "env": {}
+      "env": {
+        "DATA_DIR": "/home/claude/mcp-data"
+      }
     }
   }
 }

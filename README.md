@@ -72,7 +72,7 @@ The unified Docker image includes:
 
 ## Authenticating to Git or other SCC Providers
 
-### GitHub 
+### GitHub
 The `gh` tool is included in the image and can be used for all GitHub operations. My recommendation:
 - Visit this link to configure a [fine-grained access-token](https://github.com/settings/personal-access-tokens/new?name=MyRepo-AI&description=For%20AI%20Agent%20Usage&contents=write&pull_requests=write&issues=write) with a sensible set of permissions predefined.
 - On that page, restrict the token to the project repository.
@@ -115,16 +115,27 @@ Create a `.mcp.json` file in your project root:
 ```json
 {
   "mcpServers": {
+    "your-server-name": {
+      "command": "command-to-run",
+      "args": ["arg1", "arg2"],
+      "env": {
+        "ENV_VAR": "value"
+      }
+    }
+  }
+}
+```
+
+**Example with mcp-memory-keeper:**
+
+```json
+{
+  "mcpServers": {
     "memory-keeper": {
       "command": "npx",
       "args": ["mcp-memory-keeper"],
-      "env": {}
-    },
-    "custom-server": {
-      "command": "python",
-      "args": ["-m", "my_mcp_server"],
       "env": {
-        "API_KEY": "your-key-here"
+        "DATA_DIR": "/home/claude/mcp-data"
       }
     }
   }
@@ -135,6 +146,8 @@ When you start AgentBox, it will:
 1. Check if `.mcp.json` exists in your project
 2. Automatically configure any MCP servers not already set up
 3. Skip servers that are already configured (idempotent)
+
+**MCP Data Persistence**: MCP servers that store data (like memory-keeper) can use `/home/claude/mcp-data` which is mounted as a persistent Docker volume. Data stored here will survive container restarts and deletions while maintaining per-project isolation.
 
 **Note**: Environment variables in `.mcp.json` support expansion with `${VAR}` or `${VAR:-default}` syntax. You can reference variables from your project's `.env` file.
 
