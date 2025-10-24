@@ -49,6 +49,13 @@ if [ -z "$(git config --global user.email)" ]; then
     fi
 fi
 
+# Configure MCP servers from project-level .mcp.json if it exists
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${SCRIPT_DIR}/mcp_functions.sh" ]; then
+    source "${SCRIPT_DIR}/mcp_functions.sh"
+    configure_mcp_servers
+fi
+
 # Set terminal for better experience
 export TERM=xterm-256color
 

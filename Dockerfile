@@ -193,6 +193,10 @@ USER root
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# Copy MCP functions
+COPY mcp_functions.sh /usr/local/bin/mcp_functions.sh
+RUN chmod +x /usr/local/bin/mcp_functions.sh
+
 # Set working directory
 WORKDIR /workspace
 
