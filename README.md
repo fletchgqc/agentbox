@@ -7,12 +7,40 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 ## Features
 
 - **Shares project directory with host**: Maps a volume with the source code so that you can see and modify the agent's changes on the host machine - just like if you were running Claude without a container.
+- **Multi-Workspace Support**: Mount additional project directories for cross-project development
 - **Unified Development Environment**: Single Docker image with Python, Node.js, Java, and Shell support
 - **Automatic Rebuilds**: Detects changes to Dockerfile/entrypoint and rebuilds automatically
 - **Per-Project Isolation**: Each project directory gets its own isolated container environment
 - **Persistent Data**: Package caches and shell history persist between sessions
 - **Claude CLI Integration**: Built-in support for Claude CLI with per-project authentication
 - **SSH Support**: Dedicated SSH directory for secure Git operations
+
+## Multi-Workspace Support
+
+AgentBox supports mounting additional workspace directories for scenarios where your agent needs access to multiple projects:
+
+```bash
+# Mount a single additional workspace
+agentbox --workspaces ~/other-project
+
+# Mount multiple workspaces (comma-separated)
+agentbox --workspaces ~/proj1, ~/proj2, ~/proj3
+
+# Works with shell mode too
+agentbox --workspaces ~/library-code shell
+```
+
+**How it works:**
+- Your current directory is always mounted as `/workspace`
+- Additional workspaces are mounted as `/workspace2`, `/workspace3`, etc.
+- All workspaces are writable - changes sync back to the host
+- The mounting order follows the order you specify in the flag
+
+**Example use cases:**
+- Accessing a shared library while developing an application
+- Working with code-fu documentation while developing in another project
+- Cross-referencing implementation patterns across multiple codebases
+- Applying consistent changes across related repositories
 
 ## Installation
 
@@ -33,6 +61,9 @@ agentbox
 # Non-agentbox CLI flags are passed through to claude.
 # For example, to continue the most recent session
 agentbox -c
+
+# Mount additional workspace(s) for multi-project access
+agentbox --workspaces ~/proj1, ~/proj2  # Multiple workspaces
 
 # Start shell with sudo privileges
 agentbox shell --admin
@@ -72,7 +103,7 @@ The unified Docker image includes:
 
 ## Authenticating to Git or other SCC Providers
 
-### GitHub 
+### GitHub
 The `gh` tool is included in the image and can be used for all GitHub operations. My recommendation:
 - Visit this link to configure a [fine-grained access-token](https://github.com/settings/personal-access-tokens/new?name=MyRepo-AI&description=For%20AI%20Agent%20Usage&contents=write&pull_requests=write&issues=write) with a sensible set of permissions predefined.
 - On that page, restrict the token to the project repository.
