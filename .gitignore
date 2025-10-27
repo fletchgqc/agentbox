@@ -27,7 +27,3 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
-
-# MCP configuration (may contain sensitive API keys)
-# Use .mcp.json.example as a template
-.mcp.json
