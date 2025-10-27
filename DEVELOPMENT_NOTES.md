@@ -44,7 +44,8 @@ After each successful rebuild, `docker image prune -f --filter "label=agentbox.v
 
 ### Mount Points
 ```bash
-/workspace              # Project directory (main mount)
+/workspace              # Project directory (main mount, always current directory)
+/<directory_name>       # Additional directories (via --add-dir flag, using folder basenames e.g., /foo, /bar)
 /home/claude/.ssh       # SSH keys from ~/.agentbox/ssh/
 /home/claude/.gitconfig # Git config (read-only)
 /home/claude/.npm       # NPM cache
@@ -102,7 +103,9 @@ The `agentbox` script has these key functions:
 - `calculate_hash()`: SHA256 hash for change detection
 - `needs_rebuild()`: Compare hashes with image label
 - `build_image()`: Docker build with proper args
-- `run_container()`: Main container execution logic
+- `mount_additional_dirs()`: Mount extra directories with intuitive folder names (e.g., /foo, /bar)
+- `validate_dir_path()`: Validate directory paths (traversal check, system dirs, existence, duplicates)
+- `run_container()`: Main container execution logic with all mounts and command execution
 - `ssh_setup()`: Initialize ~/.agentbox/ssh/ directory
 
 ## Critical Implementation Notes
