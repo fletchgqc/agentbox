@@ -149,12 +149,37 @@ cleanup_old_containers() {
     fi
 }
 
+# Mount additional workspaces to Docker mount options
+mount_additional_workspaces() {
+    local -n mount_opts_ref=$1
+    shift
+    local extra_workspaces=("$@")
+
+    local workspace_counter=2
+    for extra_ws in "${extra_workspaces[@]}"; do
+        if [[ -d "$extra_ws" ]]; then
+            mount_opts_ref+=(-v "$extra_ws:/workspace${workspace_counter}:z")
+            log_info "Mounting additional workspace: $extra_ws -> /workspace${workspace_counter}"
+            ((workspace_counter++))
+        else
+            log_warning "Skipping non-existent workspace: $extra_ws"
+        fi
+    done
+}
+
 # Run container with --rm (ephemeral)
 run_container() {
     local container_name="$1"
     shift
 
-    # Check if first arg is "shell" mode
+    # Collect workspace paths from arguments
+    local extra_workspaces=()
+    while [[ $# -gt 0 ]] && [[ "$1" != "shell" ]]; do
+        extra_workspaces+=("$1")
+        shift
+    done
+
+    # Check if first remaining arg is "shell" mode
     local shell_mode=false
     local admin_mode=false
     if [[ "${1:-}" == "shell" ]]; then
@@ -179,6 +204,8 @@ run_container() {
     local mount_opts=(
         -v "$PROJECT_DIR:/workspace:z"
     )
+
+    mount_additional_workspaces mount_opts "${extra_workspaces[@]}"
 
     # Mount .gitconfig if it exists
     if [[ -f "${HOME}/.gitconfig" ]]; then
@@ -291,9 +318,10 @@ Usage:
     agentbox [OPTIONS] [COMMAND]
 
 Options:
-    -h, --help      Show this help message
-    --cleanup       Remove AgentBox image and cached data
-    --rebuild       Force rebuild of the image
+    -h, --help              Show this help message
+    --cleanup               Remove AgentBox image and cached data
+    --rebuild               Force rebuild of the image
+    --workspaces <paths>    Mount additional workspace(s) (comma-separated or multiple flags)
 
 Commands:
     shell [--admin] Start interactive shell instead of Claude CLI
@@ -305,16 +333,20 @@ Commands:
     Other commands will be executed inside the container.
 
 Examples:
-    agentbox                    # Start Claude CLI for current project
-    agentbox shell              # Start interactive shell instead of Claude
-    agentbox shell --admin      # Start admin shell with sudo access
-    agentbox python script.py   # Run Python script in container
-    agentbox --cleanup          # Remove image and optionally cached data
-    agentbox --rebuild          # Force rebuild image
-    agentbox ssh-init           # Set up SSH for AgentBox
+    agentbox                                          # Start Claude CLI for current project
+    agentbox shell                                    # Start interactive shell instead of Claude
+    agentbox shell --admin                            # Start admin shell with sudo access
+    agentbox --workspaces ~/proj1, ~/proj2            # Add workspace(s) with Claude CLI
+    agentbox python script.py                         # Run Python script in container
+    agentbox --cleanup                                # Remove image and optionally cached data
+    agentbox --rebuild                                # Force rebuild image
+    agentbox ssh-init                                 # Set up SSH for AgentBox
 
 Containers are ephemeral and automatically removed when you exit.
 Package caches and shell history persist between sessions.
+
+Additional workspaces are mounted as /workspace2, /workspace3, etc.
+The current directory is always mounted as /workspace.
 EOF
 }
 
@@ -391,6 +423,7 @@ main() {
     local shell_mode=false
     local admin_mode=false
     local cmd_args=()
+    local extra_workspaces=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -405,6 +438,17 @@ main() {
             --rebuild)
                 force_rebuild=true
                 shift
+                ;;
+            --workspaces)
+                if [[ -z "${2:-}" ]]; then
+                    log_error "--workspaces requires one or more paths (comma-separated)"
+                    exit 1
+                fi
+                IFS=',' read -ra workspace_list <<< "$2"
+                for ws in "${workspace_list[@]}"; do
+                    extra_workspaces+=("$ws")
+                done
+                shift 2
                 ;;
             shell)
                 shell_mode=true
@@ -460,12 +504,12 @@ main() {
     # Run or attach to container
     if [[ "$shell_mode" == "true" ]]; then
         if [[ "$admin_mode" == "true" ]]; then
-            run_container "$container_name" "shell" "--admin" "${cmd_args[@]}"
+            run_container "$container_name" "${extra_workspaces[@]}" "shell" "--admin" "${cmd_args[@]}"
         else
-            run_container "$container_name" "shell" "${cmd_args[@]}"
+            run_container "$container_name" "${extra_workspaces[@]}" "shell" "${cmd_args[@]}"
         fi
     else
-        run_container "$container_name" "${cmd_args[@]}"
+        run_container "$container_name" "${extra_workspaces[@]}" "${cmd_args[@]}"
     fi
 }
 

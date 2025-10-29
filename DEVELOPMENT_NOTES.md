@@ -19,9 +19,11 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 
 3. **Volume Strategy**: Claude CLI config uses Docker named volumes (not bind mounts) to avoid permission issues. Initialized from `~/.claude` if it exists.
 
-4. **SSH Implementation**: Currently mounts `~/.agentbox/ssh/` directory directly (not true SSH agent forwarding). Future improvement could use Docker's `--ssh` flag for better security.
+5. **SSH Implementation**: Currently mounts `~/.agentbox/ssh/` directory directly (not true SSH agent forwarding). Future improvement could use Docker's `--ssh` flag for better security.
 
-5. **UID/GID Handling**: Dockerfile builds with host user's UID/GID passed as build args to minimize permission issues, but some remain (see ZSH history issue).
+6. **UID/GID Handling**: Dockerfile builds with host user's UID/GID passed as build args to minimize permission issues, but some remain (see ZSH history issue).
+
+7. **Multi-Workspace Support**: The `--workspaces` flag accepts comma-separated paths and mounts them sequentially as `/workspace2`, `/workspace3`, etc. Implementation uses `mount_additional_workspaces()` function with bash nameref parameters for efficient array manipulation. Validates directory existence and logs each mount operation.
 
 ## Implementation Details
 
@@ -42,7 +44,8 @@ Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Com
 
 ### Mount Points
 ```bash
-/workspace              # Project directory (main mount)
+/workspace              # Project directory (main mount, always current dir)
+/workspace2             # Additional workspace (via --workspaces flag)
 /home/claude/.ssh       # SSH keys from ~/.agentbox/ssh/
 /home/claude/.gitconfig # Git config (read-only)
 /home/claude/.npm       # NPM cache
@@ -102,7 +105,8 @@ The `agentbox` script has these key functions:
 - `needs_rebuild()`: Compare hashes with image label
 - `build_image()`: Docker build with proper args
 - `cleanup_old_containers()`: Remove containers using old images
-- `run_container()`: Main container execution logic
+- `mount_additional_workspaces()`: Mount extra workspace directories as /workspace2, /workspace3, etc.
+- `run_container()`: Main container execution logic with workspace collection
 - `ssh_setup()`: Initialize ~/.agentbox/ssh/ directory
 
 ## Critical Implementation Notes
