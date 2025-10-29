@@ -7,6 +7,7 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 ## Features
 
 - **Shares project directory with host**: Maps a volume with the source code so that you can see and modify the agent's changes on the host machine - just like if you were running Claude without a container.
+- **Multi-Instance Support**: Run multiple Claude instances for the same project simultaneously - just run `agentbox` again in a new terminal
 - **Multi-Workspace Support**: Mount additional project directories for cross-project development
 - **Unified Development Environment**: Single Docker image with Python, Node.js, Java, and Shell support
 - **Automatic Rebuilds**: Detects changes to Dockerfile/entrypoint and rebuilds automatically
@@ -14,6 +15,38 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 - **Persistent Data**: Package caches and shell history persist between sessions
 - **Claude CLI Integration**: Built-in support for Claude CLI with per-project authentication
 - **SSH Support**: Dedicated SSH directory for secure Git operations
+
+## Multi-Instance Support
+
+Need to work on multiple tasks in parallel? Simply open a new terminal and run `agentbox` again. AgentBox automatically detects running containers and creates a new instance:
+
+```bash
+# Terminal 1: Start first Claude instance
+agentbox
+
+# Terminal 2: Start second Claude instance (automatic)
+agentbox
+```
+
+**How it works:**
+- First instance: `agentbox-<hash>` (container name)
+- Second instance: `agentbox-<hash>-2` (automatic suffix)
+- Third instance: `agentbox-<hash>-3` (automatic suffix)
+
+**What's shared across instances:**
+- ✅ Claude CLI authentication (no need to re-authenticate!)
+- ✅ Project directory (`/workspace`)
+- ✅ SSH keys and Git config
+- ✅ Project `.env` file
+
+**What's isolated per instance:**
+- ✅ Claude CLI sessions and conversations
+- ✅ MCP server data (avoids database conflicts)
+- ✅ Package manager caches
+- ✅ Shell history
+- ✅ Running processes
+
+This makes it easy to work on multiple features, test different approaches, or debug issues without interfering with other running instances.
 
 ## Multi-Workspace Support
 

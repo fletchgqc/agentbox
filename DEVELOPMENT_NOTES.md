@@ -17,7 +17,14 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 
 2. **Hash-Based Naming**: Container names use SHA256 hash of project directory path (first 12 chars) to ensure uniqueness and avoid conflicts.
 
-3. **Volume Strategy**: Claude CLI config uses Docker named volumes (not bind mounts) to avoid permission issues. Initialized from `~/.claude` if it exists.
+3. **Multi-Instance Support**: Automatically detects running containers and appends numeric suffixes (`-2`, `-3`, etc.) to enable multiple simultaneous Claude instances for the same project. Uses `get_next_instance()` to find the next available instance number by checking `docker ps` for existing containers.
+
+4. **Volume Strategy**:
+   - **Claude auth volume**: Shared across all instances (`agentbox-claude-<hash>`) to avoid re-authentication
+   - **MCP data volumes**: Separate per instance (`agentbox-mcp-<hash>-2`) to avoid database conflicts
+   - **Package caches**: Separate per instance to avoid concurrent access issues
+   - **Shell history**: Separate per instance for isolation
+   - All volumes use Docker named volumes (not bind mounts) to avoid permission issues. Claude volume initialized from `~/.claude` if it exists.
 
 5. **SSH Implementation**: Currently mounts `~/.agentbox/ssh/` directory directly (not true SSH agent forwarding). Future improvement could use Docker's `--ssh` flag for better security.
 
