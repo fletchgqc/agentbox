@@ -59,6 +59,21 @@ get_container_name() {
     echo "${CONTAINER_PREFIX}-${project_hash}"
 }
 
+# Get next available instance number for current project
+get_next_instance() {
+    local project_hash=$(echo -n "$PROJECT_DIR" | sha256sum | cut -c1-12)
+    local base_name="${CONTAINER_PREFIX}-${project_hash}"
+
+    docker ps --format '{{.Names}}' | grep -q "^${base_name}$" || return
+
+    local instance=2
+    while docker ps --format '{{.Names}}' | grep -q "^${base_name}-${instance}$"; do
+        ((instance++))
+    done
+
+    echo "-${instance}"
+}
+
 
 # Check if image needs rebuild
 needs_rebuild() {
@@ -169,8 +184,11 @@ mount_additional_workspaces() {
 
 # Run container with --rm (ephemeral)
 run_container() {
-    local container_name="$1"
-    shift
+    local base_container_name="$1"
+    local instance_suffix="$2"
+    shift 2
+
+    local container_name="${base_container_name}${instance_suffix}"
 
     # Collect workspace paths from arguments
     local extra_workspaces=()
@@ -194,11 +212,15 @@ run_container() {
 
     local cmd_args=("$@")
 
-    if [[ "$admin_mode" == "true" ]]; then
-        log_success "Starting container for: $PROJECT_NAME (admin shell)"
-    else
-        log_success "Starting container for: $PROJECT_NAME"
+    # Build log message
+    local log_msg="Starting container for: $PROJECT_NAME"
+    if [[ -n "$instance_suffix" ]]; then
+        local running_instances=$(docker ps --format '{{.Names}}' | grep -c "^${base_container_name}" || echo "0")
+        local total_instances=$((running_instances + 1))
+        log_msg+=" [instance ${instance_suffix#-} of $total_instances]"
     fi
+    [[ "$admin_mode" == "true" ]] && log_msg+=" [admin]"
+    log_success "$log_msg"
 
     # Prepare mount options
     local mount_opts=(
@@ -221,7 +243,7 @@ run_container() {
         log_warning "SSH not configured. Run 'agentbox ssh-init' to enable SSH operations."
     fi
 
-    # Mount cache directories for package managers
+    # Mount cache directories for package managers (per instance)
     local cache_dir="${HOME}/.cache/agentbox/${container_name}"
     mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
 
@@ -232,7 +254,7 @@ run_container() {
         -v "${cache_dir}/gradle:/home/claude/.gradle"
     )
 
-    # Mount per-project persistent data
+    # Mount per-project persistent data (per instance)
     local project_data_dir="${HOME}/.agentbox/projects/${container_name}"
     local history_dir="${project_data_dir}/history"
     mkdir -p "${history_dir}"
@@ -246,8 +268,9 @@ run_container() {
         -v "${history_dir}/bash_history:/home/claude/.bash_history"
     )
 
-    # Use Docker named volume for Claude config (like Anthropic's devcontainer)
-    local claude_volume_name="agentbox-claude-${container_name#agentbox-}"
+    # Use Docker named volume for Claude config (SHARED across all instances)
+    # This ensures all instances share authentication
+    local claude_volume_name="agentbox-claude-${base_container_name#agentbox-}"
 
     # Check if volume exists and initialize if needed
     if ! docker volume inspect "$claude_volume_name" &>/dev/null; then
@@ -270,9 +293,13 @@ run_container() {
     # Set Claude config directory environment variable
     mount_opts+=(--env "CLAUDE_CONFIG_DIR=/home/claude/.claude")
 
-    log_info "Claude CLI configuration mounted"
+    if [[ -n "$instance_suffix" ]]; then
+        log_info "Claude CLI configuration mounted (shared with other instances - no re-auth needed)"
+    else
+        log_info "Claude CLI configuration mounted"
+    fi
 
-    # Use Docker named volume for MCP data
+    # Use Docker named volume for MCP data (per instance to avoid conflicts)
     local mcp_volume_name="agentbox-mcp-${container_name#agentbox-}"
 
     # Check if volume exists, create if needed
@@ -495,8 +522,8 @@ main() {
     fi
 
     # Get container name for current project
-    local container_name=$(get_container_name)
-
+    local base_container_name=$(get_container_name)
+    local instance_suffix=$(get_next_instance)
 
     # Check if rebuild is needed or forced
     if [[ "$force_rebuild" == "true" ]] || needs_rebuild; then
@@ -513,16 +540,16 @@ main() {
 
     fi
 
-    # Run or attach to container
+    # Run container with appropriate mode
+    local run_args=("$base_container_name" "$instance_suffix" "${extra_workspaces[@]}")
+
     if [[ "$shell_mode" == "true" ]]; then
-        if [[ "$admin_mode" == "true" ]]; then
-            run_container "$container_name" "${extra_workspaces[@]}" "shell" "--admin" "${cmd_args[@]}"
-        else
-            run_container "$container_name" "${extra_workspaces[@]}" "shell" "${cmd_args[@]}"
-        fi
-    else
-        run_container "$container_name" "${extra_workspaces[@]}" "${cmd_args[@]}"
+        run_args+=("shell")
+        [[ "$admin_mode" == "true" ]] && run_args+=("--admin")
     fi
+
+    run_args+=("${cmd_args[@]}")
+    run_container "${run_args[@]}"
 }
 
 # Run main function
