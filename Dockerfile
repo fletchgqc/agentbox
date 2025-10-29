@@ -65,13 +65,13 @@ RUN ARCH=$(dpkg --print-architecture) && \
     rm /tmp/glab.deb && \
     glab --version
 
-# Create non-root user
-ARG USER_ID=1000
-ARG GROUP_ID=1000
+# Create non-root user with dedicated group
 ARG USERNAME=claude
 
-RUN groupadd -g ${GROUP_ID} ${USERNAME} || true && \
-    useradd -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/zsh ${USERNAME} && \
+# Create claude group and user with fixed IDs
+# Using 1000:1000 as standard first non-root user/group IDs
+RUN groupadd -g 1000 ${USERNAME} && \
+    useradd -m -u 1000 -g 1000 -s /bin/zsh ${USERNAME} && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
     chmod 0440 /etc/sudoers.d/${USERNAME}
 
