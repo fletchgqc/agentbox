@@ -108,6 +108,20 @@ enable_project_mcp_servers() {
     echo "   ✓ Enabled project MCP servers (workaround for bug #9189)"
 }
 
+ensure_mcp_data_dirs() {
+    local config_file="${1:-/workspace/.mcp.json}"
+
+    jq -r '.mcpServers | to_entries[] | @json' "$config_file" 2>/dev/null | while read -r server; do
+        local name=$(get_server_name "$server")
+        local data_dir=$(echo "$server" | jq -r '.value.env.DATA_DIR // empty')
+        if [[ -n "$data_dir" ]] && [[ ! -d "$data_dir" ]]; then
+            echo "   → Creating DATA_DIR for $name: $data_dir"
+            mkdir -p "$data_dir"
+            chmod -R 755 "$data_dir"
+        fi
+    done
+}
+
 process_each_server_from_config() {
     local configured_list="$1"
     local config_file="${2:-/workspace/.mcp.json}"
@@ -137,6 +151,9 @@ configure_mcp_servers() {
 
     echo "🔧 Configuring MCP servers from $config_file..."
     check_jq_installed || return 1
+
+    # Always ensure data directories exist (even if servers already configured)
+    ensure_mcp_data_dirs "$config_file"
 
     local configured=$(get_all_configured_servers)
     process_each_server_from_config "$configured" "$config_file"
