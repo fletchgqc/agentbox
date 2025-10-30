@@ -17,11 +17,28 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 
 2. **Hash-Based Naming**: Container names use SHA256 hash of project directory path (first 12 chars) to ensure uniqueness and avoid conflicts.
 
-3. **Volume Strategy**: Claude CLI config uses Docker named volumes (not bind mounts) to avoid permission issues. Initialized from `~/.claude` if it exists.
+3. **Multi-Instance Support**: Automatically detects running containers and appends numeric suffixes (`-2`, `-3`, etc.) to enable multiple simultaneous Claude instances for the same project. Uses `get_next_instance()` to find the next available instance number by checking `docker ps` for existing containers.
 
-4. **SSH Implementation**: Currently mounts `~/.agentbox/ssh/` directory directly (not true SSH agent forwarding). Future improvement could use Docker's `--ssh` flag for better security.
+4. **Volume Strategy**:
+   - **Shared Across Instances**:
+     * `/home/claude/.claude` → Docker volume `agentbox-claude-<hash>` (authentication)
+     * `/workspace` → Host bind mount (project directory)
+     * `/home/claude/.ssh` → Host bind mount (`~/.agentbox/ssh/`)
+     * `/home/claude/.gitconfig` → Host bind mount (read-only)
+   - **Isolated Per Instance**:
+     * `/home/claude/mcp-data` → Docker volume `agentbox-mcp-<hash>-{instance}` (database files)
+     * `/home/claude/.npm` → Host bind mount (`~/.cache/agentbox/{container-name}/npm`)
+     * `/home/claude/.cache/pip` → Host bind mount (`~/.cache/agentbox/{container-name}/pip`)
+     * `/home/claude/.m2` → Host bind mount (`~/.cache/agentbox/{container-name}/maven`)
+     * `/home/claude/.gradle` → Host bind mount (`~/.cache/agentbox/{container-name}/gradle`)
+     * Shell history files → Host bind mount (`~/.agentbox/projects/{container-name}/history/`)
+   - All volumes use Docker named volumes or bind mounts. Claude volume initialized from `~/.claude` if it exists.
 
-5. **UID/GID Handling**: Dockerfile builds with host user's UID/GID passed as build args to minimize permission issues, but some remain (see ZSH history issue).
+5. **SSH Implementation**: Currently mounts `~/.agentbox/ssh/` directory directly (not true SSH agent forwarding). Future improvement could use Docker's `--ssh` flag for better security.
+
+6. **UID/GID Handling**: Dockerfile builds with host user's UID/GID passed as build args to minimize permission issues, but some remain (see ZSH history issue).
+
+7. **Multi-Workspace Support**: The `--workspaces` flag accepts comma-separated paths and mounts them sequentially as `/workspace2`, `/workspace3`, etc. Implementation uses `mount_additional_workspaces()` function with bash nameref parameters for efficient array manipulation. Validates directory existence and logs each mount operation.
 
 ## Implementation Details
 
@@ -42,7 +59,8 @@ Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Com
 
 ### Mount Points
 ```bash
-/workspace              # Project directory (main mount)
+/workspace              # Project directory (main mount, always current dir)
+/workspace2             # Additional workspace (via --workspaces flag)
 /home/claude/.ssh       # SSH keys from ~/.agentbox/ssh/
 /home/claude/.gitconfig # Git config (read-only)
 /home/claude/.npm       # NPM cache
@@ -102,7 +120,8 @@ The `agentbox` script has these key functions:
 - `needs_rebuild()`: Compare hashes with image label
 - `build_image()`: Docker build with proper args
 - `cleanup_old_containers()`: Remove containers using old images
-- `run_container()`: Main container execution logic
+- `mount_additional_workspaces()`: Mount extra workspace directories as /workspace2, /workspace3, etc.
+- `run_container()`: Main container execution logic with workspace collection
 - `ssh_setup()`: Initialize ~/.agentbox/ssh/ directory
 
 ## Critical Implementation Notes
