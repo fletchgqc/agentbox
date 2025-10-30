@@ -112,14 +112,18 @@ process_each_server_from_config() {
     local configured_list="$1"
     local config_file="${2:-/workspace/.mcp.json}"
 
+    local added_any=false
     jq -r '.mcpServers | to_entries[] | @json' "$config_file" 2>/dev/null | while read -r server; do
         local name=$(get_server_name "$server")
-        if is_server_already_configured "$name" "$configured_list"; then
-            echo "   ✓ $name (already configured)"
-        else
+        if ! is_server_already_configured "$name" "$configured_list"; then
             add_mcp_server "$server"
+            added_any=true
         fi
     done
+
+    if ! $added_any; then
+        echo "   ✓ All MCP servers already configured"
+    fi
 }
 
 configure_mcp_servers() {
