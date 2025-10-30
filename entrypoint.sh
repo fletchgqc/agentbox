@@ -49,6 +49,20 @@ if [ -z "$(git config --global user.email)" ]; then
     fi
 fi
 
+# Ensure MCP data directories exist with correct permissions
+if [ -d "/home/claude/mcp-data" ]; then
+    chmod -R 755 /home/claude/mcp-data
+
+    if [ -f /workspace/.mcp.json ] && command -v jq &>/dev/null; then
+        jq -r '.mcpServers | to_entries[] | .value.env.DATA_DIR // empty' /workspace/.mcp.json \
+            | while IFS= read -r data_dir; do
+                [[ -n "$data_dir" ]] || continue
+                mkdir -p "$data_dir"
+                chmod -R 755 "$data_dir"
+            done
+    fi
+fi
+
 # Configure MCP servers from project-level .mcp.json if it exists
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "${SCRIPT_DIR}/mcp_functions.sh" ]; then
