@@ -42,7 +42,7 @@ agentbox
 **What's isolated per instance:**
 - ✅ Claude CLI sessions and conversations
 - ✅ MCP server data (avoids database conflicts)
-- ✅ Package manager caches
+- ✅ Package manager caches (npm, pip, maven, gradle)
 - ✅ Shell history
 - ✅ Running processes
 

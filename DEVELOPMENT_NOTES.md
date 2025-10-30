@@ -20,11 +20,19 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 3. **Multi-Instance Support**: Automatically detects running containers and appends numeric suffixes (`-2`, `-3`, etc.) to enable multiple simultaneous Claude instances for the same project. Uses `get_next_instance()` to find the next available instance number by checking `docker ps` for existing containers.
 
 4. **Volume Strategy**:
-   - **Claude auth volume**: Shared across all instances (`agentbox-claude-<hash>`) to avoid re-authentication
-   - **MCP data volumes**: Separate per instance (`agentbox-mcp-<hash>-2`) to avoid database conflicts
-   - **Package caches**: Separate per instance to avoid concurrent access issues
-   - **Shell history**: Separate per instance for isolation
-   - All volumes use Docker named volumes (not bind mounts) to avoid permission issues. Claude volume initialized from `~/.claude` if it exists.
+   - **Shared Across Instances**:
+     * `/home/claude/.claude` → Docker volume `agentbox-claude-<hash>` (authentication)
+     * `/workspace` → Host bind mount (project directory)
+     * `/home/claude/.ssh` → Host bind mount (`~/.agentbox/ssh/`)
+     * `/home/claude/.gitconfig` → Host bind mount (read-only)
+   - **Isolated Per Instance**:
+     * `/home/claude/mcp-data` → Docker volume `agentbox-mcp-<hash>-{instance}` (database files)
+     * `/home/claude/.npm` → Host bind mount (`~/.cache/agentbox/{container-name}/npm`)
+     * `/home/claude/.cache/pip` → Host bind mount (`~/.cache/agentbox/{container-name}/pip`)
+     * `/home/claude/.m2` → Host bind mount (`~/.cache/agentbox/{container-name}/maven`)
+     * `/home/claude/.gradle` → Host bind mount (`~/.cache/agentbox/{container-name}/gradle`)
+     * Shell history files → Host bind mount (`~/.agentbox/projects/{container-name}/history/`)
+   - All volumes use Docker named volumes or bind mounts. Claude volume initialized from `~/.claude` if it exists.
 
 5. **SSH Implementation**: Currently mounts `~/.agentbox/ssh/` directory directly (not true SSH agent forwarding). Future improvement could use Docker's `--ssh` flag for better security.
 
