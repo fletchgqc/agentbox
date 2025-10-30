@@ -92,15 +92,8 @@ build_image() {
 
     log_build "Building AgentBox image (this may take a few minutes on first run)..."
 
-    # Get current user/group IDs
-    local user_id=$(id -u)
-    local group_id=$(id -g)
-
     # Build with progress output
     if docker build \
-        --build-arg USER_ID="${user_id}" \
-        --build-arg GROUP_ID="${group_id}" \
-        --build-arg USERNAME="claude" \
         --label "agentbox.hash=${combined_hash}" \
         --label "agentbox.version=1.0.0" \
         --label "agentbox.built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -244,6 +237,26 @@ run_container() {
     mount_opts+=(--env "CLAUDE_CONFIG_DIR=/home/claude/.claude")
 
     log_info "Claude CLI configuration mounted"
+
+    # Use Docker named volume for MCP data
+    local mcp_volume_name="agentbox-mcp-${container_name#agentbox-}"
+
+    # Check if volume exists and initialize if needed
+    if ! docker volume inspect "$mcp_volume_name" &>/dev/null; then
+        log_info "Creating MCP data volume for persistent storage"
+        docker volume create "$mcp_volume_name" &>/dev/null
+
+        # Initialize volume with proper ownership for claude user
+        # Run as root to perform chown operation (use numeric UID:GID from image)
+        docker run --rm \
+            --user root \
+            -v "${mcp_volume_name}:/home/claude/mcp-data" \
+            "$IMAGE_NAME" \
+            sh -c "chown -R \$(id -u claude):\$(id -g claude) /home/claude/mcp-data && chmod -R 755 /home/claude/mcp-data"
+    fi
+
+    mount_opts+=(-v "${mcp_volume_name}:/home/claude/mcp-data")
+    log_info "MCP data directory mounted (memory-keeper database will persist)"
 
     # Prepare the command to run
     local container_cmd
