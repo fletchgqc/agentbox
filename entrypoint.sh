@@ -49,6 +49,12 @@ if [ -z "$(git config --global user.email)" ]; then
     fi
 fi
 
+# Set per-instance npm cache to prevent multi-instance lock conflicts
+if command -v npm &>/dev/null; then
+    export NPM_CONFIG_CACHE="/tmp/npm-cache"
+    mkdir -p "$NPM_CONFIG_CACHE"
+fi
+
 # Ensure MCP data directories exist with correct permissions
 if [ -d "/home/claude/mcp-data" ]; then
     chmod -R 755 /home/claude/mcp-data
