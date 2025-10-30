@@ -29,15 +29,57 @@ is_server_already_configured() {
     echo "$configured_list" | grep -q "^${server_name}$"
 }
 
+get_env_vars_array() {
+    local server_json="$1"
+    local -n result=$2
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && result+=(--env "$line")
+    done < <(echo "$server_json" | jq -r '.value.env // empty | to_entries[] | "\(.key)=\(.value)"')
+}
+
+get_args_array() {
+    local server_json="$1"
+    local -n result=$2
+    while IFS= read -r arg; do
+        [[ -n "$arg" ]] && result+=("$arg")
+    done < <(echo "$server_json" | jq -r '.value.args[]?')
+}
+
+build_mcp_add_command() {
+    local name="$1"
+    local cmd="$2"
+    local -n env_vars_ref=$3
+    local -n args_ref=$4
+    local -n result=$5
+
+    result=(claude mcp add --scope user)
+    result+=("${env_vars_ref[@]}")
+    result+=(--) # Separator between options and positional args
+    result+=("$name" "$cmd")
+    result+=("${args_ref[@]}")
+}
+
+execute_mcp_add_command() {
+    local -n cmd_array=$1
+    "${cmd_array[@]}" 2>&1 | sed 's/^/     /'
+}
+
 add_mcp_server() {
     local server_json="$1"
     local name=$(get_server_name "$server_json")
     local cmd=$(get_server_command "$server_json")
-    local args=$(get_server_args "$server_json")
-    local env_flags=$(get_server_env_flags "$server_json")
 
     echo "   + Adding $name..."
-    eval "claude mcp add --scope local $env_flags $name $cmd $args" 2>&1 | sed 's/^/     /'
+
+    local env_vars=()
+    get_env_vars_array "$server_json" env_vars
+
+    local args=()
+    get_args_array "$server_json" args
+
+    local mcp_cmd=()
+    build_mcp_add_command "$name" "$cmd" env_vars args mcp_cmd
+    execute_mcp_add_command mcp_cmd
 }
 
 check_jq_installed() {
