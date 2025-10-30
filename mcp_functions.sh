@@ -47,6 +47,25 @@ check_jq_installed() {
     fi
 }
 
+# Enable project MCP servers by updating Claude settings.
+# Workaround for bug #9189 where the approval prompt doesn't appear.
+enable_project_mcp_servers() {
+    local settings_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+    local settings_file="$settings_dir/settings.local.json"
+
+    mkdir -p "$settings_dir"
+
+    # Create or update settings file
+    if [[ ! -f "$settings_file" ]] || ! jq -e . "$settings_file" >/dev/null 2>&1; then
+        echo '{"enableAllProjectMcpServers": true}' > "$settings_file"
+    else
+        local tmp=$(mktemp)
+        jq '.enableAllProjectMcpServers = true' "$settings_file" > "$tmp" && mv "$tmp" "$settings_file"
+    fi
+
+    echo "   ✓ Enabled project MCP servers (workaround for bug #9189)"
+}
+
 process_each_server_from_config() {
     local configured_list="$1"
     local config_file="${2:-/workspace/.mcp.json}"
@@ -63,6 +82,10 @@ process_each_server_from_config() {
 
 configure_mcp_servers() {
     local config_file="${1:-/workspace/.mcp.json}"
+
+    # Enable project MCP servers in settings (workaround for bug #9189)
+    # Do this regardless of whether .mcp.json exists in this project
+    enable_project_mcp_servers
 
     [ ! -f "$config_file" ] && return 0
 
