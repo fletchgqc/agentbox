@@ -181,7 +181,3 @@ I make no guarantee to support this project in the long term. Feel free to creat
 
 If you do contribute, consider that AgentBox is designed to be simple and maintainable. The value of new features will always be weighed against the added complexity.
 
-### Known Issues
-
-#### ZSH History Error
-When exiting the shell, you may see: `zsh: can't rename /home/claude/.zsh_history.new to $HISTFILE`. I'm not sure why this happens but it seems to be cosmetic - history persists correctly between sessions.
