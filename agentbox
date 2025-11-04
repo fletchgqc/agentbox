@@ -251,7 +251,11 @@ run_container() {
         if [[ "$admin_mode" == "true" ]]; then
             container_cmd=(bash -c "echo '🔒 Admin shell - sudo access enabled' && exec ${cmd_args[*]:-/bin/zsh}")
         else
-            container_cmd=("${cmd_args[@]:-/bin/zsh}")
+            if [[ ${#cmd_args[@]} -gt 0 ]]; then
+                container_cmd=(/bin/zsh "${cmd_args[@]}")
+            else
+                container_cmd=(/bin/zsh)
+            fi
         fi
     else
         # Run claude through zsh to get proper environment
