@@ -517,12 +517,11 @@ main() {
                 shift
                 ;;
             --add-dir)
-                if [[ -z "${2:-}" ]]; then
-                    log_error "--add-dir requires one or more paths (comma-separated)"
-                    exit 1
-                fi
-                parse_workspace_paths "$2" extra_workspaces
-                shift 2
+                shift
+                while [[ $# -gt 0 && ! "$1" =~ ^- && "$1" != shell ]]; do
+                    parse_workspace_paths "$1" extra_workspaces
+                    shift
+                done
                 ;;
             shell)
                 shell_mode=true
