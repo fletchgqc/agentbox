@@ -149,6 +149,84 @@ cleanup_old_containers() {
     fi
 }
 
+is_absolute_path() {
+    local path="$1"
+    [[ "$path" =~ ^/ ]]
+}
+
+is_system_path() {
+    local path="$1"
+    [[ "$path" =~ ^/(etc|var|usr|sys|proc|dev)(/|$) ]]
+}
+
+is_duplicate_of_project() {
+    local ws_realpath="$1"
+    [[ "$ws_realpath" == "$(realpath "$PROJECT_DIR")" ]]
+}
+
+is_duplicate_in_array() {
+    local ws_realpath="$1"
+    local -n check_array_ref=$2
+
+    for existing_ws in "${check_array_ref[@]}"; do
+        if [[ "$ws_realpath" == "$existing_ws" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+validate_workspace_path() {
+    local ws="$1"
+    local -n validated_workspaces_ref=$2
+
+    ws=$(echo "$ws" | xargs)
+
+    if [[ "$ws" =~ ^~ ]]; then
+        ws="${ws/#\~/$HOME}"
+    fi
+
+    if ! is_absolute_path "$ws"; then
+        log_error "Workspace must be absolute path: $ws"
+        exit 1
+    fi
+
+    if [[ ! -d "$ws" ]]; then
+        log_error "Workspace directory not found: $ws"
+        exit 1
+    fi
+
+    local ws_realpath=$(realpath "$ws")
+
+    if is_duplicate_of_project "$ws_realpath"; then
+        log_warning "Skipping duplicate: $ws (already mounted as /workspace)"
+        return 1
+    fi
+
+    if is_duplicate_in_array "$ws_realpath" validated_workspaces_ref; then
+        log_warning "Skipping duplicate workspace: $ws"
+        return 1
+    fi
+
+    if is_system_path "$ws_realpath"; then
+        log_warning "Mounting system directory: $ws (proceed with caution)"
+    fi
+
+    # Store the realpath, not the original path
+    validated_workspaces_ref+=("$ws_realpath")
+    return 0
+}
+
+parse_workspace_paths() {
+    local workspace_string="$1"
+    local -n output_array_ref=$2
+
+    IFS=',' read -ra workspace_list <<< "$workspace_string"
+    for ws in "${workspace_list[@]}"; do
+        validate_workspace_path "$ws" output_array_ref || true
+    done
+}
+
 # Mount additional workspaces to Docker mount options
 mount_additional_workspaces() {
     local -n mount_opts_ref=$1
@@ -444,10 +522,7 @@ main() {
                     log_error "--add-dir requires one or more paths (comma-separated)"
                     exit 1
                 fi
-                IFS=',' read -ra workspace_list <<< "$2"
-                for ws in "${workspace_list[@]}"; do
-                    extra_workspaces+=("$ws")
-                done
+                parse_workspace_paths "$2" extra_workspaces
                 shift 2
                 ;;
             shell)
