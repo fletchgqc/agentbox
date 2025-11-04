@@ -233,12 +233,11 @@ mount_additional_workspaces() {
     shift
     local extra_workspaces=("$@")
 
-    local workspace_counter=2
     for extra_ws in "${extra_workspaces[@]}"; do
         if [[ -d "$extra_ws" ]]; then
-            mount_opts_ref+=(-v "$extra_ws:/workspace${workspace_counter}:z")
-            log_info "Mounting additional workspace: $extra_ws -> /workspace${workspace_counter}"
-            ((workspace_counter++))
+            local folder_name=$(basename "$extra_ws")
+            mount_opts_ref+=(-v "$extra_ws:/${folder_name}:z")
+            log_info "Mounting additional workspace: $extra_ws -> /${folder_name}"
         else
             log_warning "Skipping non-existent workspace: $extra_ws"
         fi
@@ -423,7 +422,7 @@ Examples:
 Containers are ephemeral and automatically removed when you exit.
 Package caches and shell history persist between sessions.
 
-Additional workspaces are mounted as /workspace2, /workspace3, etc.
+Additional workspaces are mounted at /<name> (e.g., /foo, /bar).
 The current directory is always mounted as /workspace.
 EOF
 }

@@ -32,7 +32,7 @@ agentbox --add-dir ~/library-code shell
 
 **How it works:**
 - Your current directory is always mounted as `/workspace`
-- Additional workspaces are mounted as `/workspace2`, `/workspace3`, etc.
+- Additional workspaces are mounted at `/<name>` (e.g., `/foo`, `/bar`)
 - All workspaces are writable - changes sync back to the host
 - The mounting order follows the order you specify in the flag
 
