@@ -210,13 +210,10 @@ run_container() {
     local history_dir="${project_data_dir}/history"
     mkdir -p "${history_dir}"
 
-    # Create history files if they don't exist
-    touch "${history_dir}/zsh_history"
-    touch "${history_dir}/bash_history"
-
+    # Mount history directory (not individual files to avoid file locking issues)
     mount_opts+=(
-        -v "${history_dir}/zsh_history:/home/claude/.zsh_history"
-        -v "${history_dir}/bash_history:/home/claude/.bash_history"
+        -v "${history_dir}:/home/claude/.shell_history"
+        --env "HISTFILE=/home/claude/.shell_history/zsh_history"
     )
 
     # Use Docker named volume for Claude config (like Anthropic's devcontainer)

@@ -113,9 +113,7 @@ Package manager caches are stored in `~/.cache/agentbox/<container-name>/`:
 - Gradle cache: `~/.cache/agentbox/<container-name>/gradle`
 
 ### Shell History
-Shell history files are preserved in `~/.agentbox/projects/<container-name>/history/`:
-- Zsh history: `zsh_history`
-- Bash history: `bash_history`
+Zsh history is preserved in `~/.agentbox/projects/<container-name>/history`
 
 ### Claude CLI Authentication
 Authentication data is stored in Docker named volumes (`agentbox-claude-<hash>`), providing:
@@ -186,7 +184,3 @@ I make no guarantee to support this project in the long term. Feel free to creat
 
 If you do contribute, consider that AgentBox is designed to be simple and maintainable. The value of new features will always be weighed against the added complexity.
 
-### Known Issues
-
-#### ZSH History Error
-When exiting the shell, you may see: `zsh: can't rename /home/claude/.zsh_history.new to $HISTFILE`. I'm not sure why this happens but it seems to be cosmetic - history persists correctly between sessions.
