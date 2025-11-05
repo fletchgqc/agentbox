@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         # Essential tools
         ca-certificates curl wget gnupg lsb-release sudo \
         # Development tools
-        git vim nano tmux htop tree \
+        git vim nano tmux htop tree direnv \
         # Build tools
         build-essential gcc g++ make cmake pkg-config \
         # Shell and utilities
@@ -138,6 +138,10 @@ RUN sh -c "$(wget -O- https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/t
     echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc && \
     echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.zshrc && \
     echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.zshrc
+
+# Setup direnv hooks for automatic .envrc loading
+RUN echo 'eval "$(direnv hook bash)"' >> ~/.bashrc && \
+    echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc
 
 # Add terminal size handling for better TTY support (from ClaudeBox)
 RUN cat >> ~/.zshrc <<'EOF'
