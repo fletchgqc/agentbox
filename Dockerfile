@@ -86,7 +86,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 
 # Install Node.js via NVM
 ENV NVM_DIR="/home/${USERNAME}/.nvm"
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
+RUN NVM_VERSION=$(curl -s https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/') && \
+    echo "Installing nvm version ${NVM_VERSION}" && \
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash && \
     . "$NVM_DIR/nvm.sh" && \
     nvm install --lts && \
     nvm alias default node && \
