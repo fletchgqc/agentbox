@@ -111,9 +111,7 @@ Package manager caches are stored in `~/.cache/agentbox/<container-name>/`:
 - Gradle cache: `~/.cache/agentbox/<container-name>/gradle`
 
 ### Shell History
-Shell history files are preserved in `~/.agentbox/projects/<container-name>/history/`:
-- Zsh history: `zsh_history`
-- Bash history: `bash_history`
+Zsh history is preserved in `~/.agentbox/projects/<container-name>/history`
 
 ### Claude CLI Authentication
 Authentication data is stored in Docker named volumes (`agentbox-claude-<hash>`), providing:
