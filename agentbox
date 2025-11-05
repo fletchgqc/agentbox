@@ -243,6 +243,19 @@ run_container() {
 
     log_info "Claude CLI configuration mounted"
 
+    # Mount project directory path info for direnv approval translation
+    if [[ -f "$PROJECT_DIR/.envrc" ]]; then
+        # Pass the host project directory path as an environment variable
+        mount_opts+=(--env "HOST_PROJECT_DIR=$PROJECT_DIR")
+
+        # Mount host direnv approvals to check if this .envrc is already approved
+        local host_direnv_allow="${HOME}/.local/share/direnv/allow"
+        if [[ -d "$host_direnv_allow" ]]; then
+            mount_opts+=(-v "${host_direnv_allow}:/tmp/host_direnv_allow:ro")
+            log_info "Host direnv approvals will be translated to container"
+        fi
+    fi
+
     # Prepare the command to run
     local container_cmd
     if [[ "$shell_mode" == "true" ]]; then

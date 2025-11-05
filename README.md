@@ -101,7 +101,7 @@ This will:
 ### Environment Variables
 If a `.env` file exists in your project directory, the environment variables defined there will automatically be loaded into the container.
 
-AgentBox also includes `direnv` support - if you have a `.envrc` file in your project directory, it will be automatically evaluated inside the container when you start AgentBox in this directory.
+AgentBox also includes `direnv` support - if you have a `.envrc` file in your project directory, it will be automatically evaluated inside the container if you have `direnv allow`ed it on your host machine.
 
 ## Data Persistence
 

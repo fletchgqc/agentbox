@@ -37,6 +37,28 @@ if [ -d "/home/claude/.ssh" ]; then
     echo "✅ SSH directory permissions configured"
 fi
 
+# Translate host direnv approvals to container paths
+if [ -d "/tmp/host_direnv_allow" ] && [ -f "/workspace/.envrc" ] && [ -n "$HOST_PROJECT_DIR" ]; then
+    mkdir -p /home/claude/.local/share/direnv/allow
+
+    # The host .envrc path
+    host_envrc_path="$HOST_PROJECT_DIR/.envrc"
+
+    # Calculate the expected hash for the host path + current .envrc content
+    # This is how direnv validates approvals
+    expected_host_hash=$(printf "%s\n" "$host_envrc_path" | cat - /workspace/.envrc | sha256sum | cut -d' ' -f1)
+
+    # If a valid approval exists for the current .envrc content, create a corresponding approval int the container
+    if [ -f "/tmp/host_direnv_allow/$expected_host_hash" ]; then
+        approved_path=$(cat "/tmp/host_direnv_allow/$expected_host_hash")
+        if [ "$approved_path" = "$host_envrc_path" ]; then
+            container_hash=$(printf "/workspace/.envrc\n" | cat - /workspace/.envrc | sha256sum | cut -d' ' -f1)
+            echo "/workspace/.envrc" > /home/claude/.local/share/direnv/allow/"$container_hash"
+            echo "✅ Translated direnv approval from host to container"
+        fi
+    fi
+fi
+
 # Ensure git config is set (for commits inside container)
 if [ -z "$(git config --global user.email)" ]; then
     # Try to copy from mounted .gitconfig if available
