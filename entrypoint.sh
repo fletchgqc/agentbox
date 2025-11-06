@@ -71,6 +71,11 @@ if [ -z "$(git config --global user.email)" ]; then
     fi
 fi
 
+# Check if project has MCP servers and show reminder
+if [ -f "/workspace/.mcp.json" ] || [ -f "/workspace/mcp.json" ]; then
+    echo "🔌 MCP configuration detected. To enable MCP servers, see AgentBox documentation."
+fi
+
 # Set terminal for better experience
 export TERM=xterm-256color
 

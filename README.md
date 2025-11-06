@@ -103,6 +103,20 @@ If a `.env` file exists in your project directory, the environment variables def
 
 AgentBox also includes `direnv` support - if you have a `.envrc` file in your project directory, it will be automatically evaluated inside the container if you have `direnv allow`ed it on your host machine.
 
+## MCP Server Configuration
+
+Due to [Claude Code bug #6130](https://github.com/anthropics/claude-code/issues/6130), by default you won't be prompted to enable MCP servers when running `agentbox` directly.
+
+**Workaround options:**
+
+1. **Enable individual MCP servers interactively:**
+   ```bash
+   agentbox shell
+   claude
+   ```
+
+2. **Enable all MCP servers by default** by adding `"enableAllProjectMcpServers": true` to your Claude project or user settings.
+
 ## Data Persistence
 
 ### Package Caches
