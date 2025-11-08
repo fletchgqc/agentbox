@@ -14,6 +14,11 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 - **Claude CLI Integration**: Built-in support for Claude CLI with per-project authentication
 - **SSH Support**: Dedicated SSH directory for secure Git operations
 
+## Requirements
+
+- **Docker**: Must be installed and running
+- **Bash 4.0+**: macOS users need to install via Homebrew (`brew install bash`) as macOS ships with Bash 3.2
+
 ## Installation
 
 1. Clone AgentBox to your preferred location
@@ -190,7 +195,7 @@ AgentBox began as a simplified replacement for [ClaudeBox](https://github.com/Rc
 | Files | 3 core files | 20+ files |
 | Profiles | Single unified image | 20+ language profiles |
 | Container Management | Simple per-project | Advanced slot system |
-| Bash Compatibility | Modern Bash | Bash 3.2 supported |
+| Bash Compatibility | Bash 4.0+ required | Bash 3.2 supported |
 | Setup | Automatic | Manual configuration |
 
 ## Support and Contributing

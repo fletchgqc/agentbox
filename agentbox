@@ -4,6 +4,13 @@
 
 set -euo pipefail
 
+if ((BASH_VERSINFO[0] < 4)); then
+    echo "Error: Bash 4.0 or later required (found ${BASH_VERSION})" >&2
+    echo "Due to GPL licensing, macOS ships with 3.2, which is archaic. This project requires 4.0+ to simplify the code."
+    echo "macOS users: brew install bash" >&2
+    exit 1
+fi
+
 # Configuration
 # Resolve symlinks to get the real script location (allows installation as symlink)
 readonly SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
