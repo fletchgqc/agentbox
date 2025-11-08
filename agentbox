@@ -281,15 +281,16 @@ run_container() {
     fi
 
     # Run ephemeral container with --rm
+    # ${array[@]+"${array[@]}"} avoids errors on macOS (bash 3) when array is empty.
     docker run -it --rm \
         --name "$container_name" \
         --hostname "agentbox-$PROJECT_NAME" \
-        "${mount_opts[@]}" \
-        "${env_file_args[@]}" \
+        ${mount_opts[@]+"${mount_opts[@]}"} \
+        ${env_file_args[@]+"${env_file_args[@]}"} \
         -w /workspace \
         --init \
         "$IMAGE_NAME" \
-        "${container_cmd[@]}"
+        ${container_cmd[@]+"${container_cmd[@]}"}
 }
 
 # Show help
@@ -470,12 +471,12 @@ main() {
     # Run or attach to container
     if [[ "$shell_mode" == "true" ]]; then
         if [[ "$admin_mode" == "true" ]]; then
-            run_container "$container_name" "shell" "--admin" "${cmd_args[@]}"
+            run_container "$container_name" "shell" "--admin" ${cmd_args[@]+"${cmd_args[@]}"}
         else
-            run_container "$container_name" "shell" "${cmd_args[@]}"
+            run_container "$container_name" "shell" ${cmd_args[@]+"${cmd_args[@]}"}
         fi
     else
-        run_container "$container_name" "${cmd_args[@]}"
+        run_container "$container_name" ${cmd_args[@]+"${cmd_args[@]}"}
     fi
 }
 
