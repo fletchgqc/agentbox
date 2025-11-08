@@ -23,6 +23,14 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 
 5. **UID/GID Handling**: Dockerfile builds with host user's UID/GID passed as build args to minimize permission issues, but some remain (see ZSH history issue).
 
+6. **Additional Directory Support**: The `--add-dir` flag accepts multiple directory paths (space-separated, matching claude code syntax) and mounts them using their folder basenames. For example, `/path/to/project` becomes `/project`. Implementation uses `mount_additional_dirs()` function with bash nameref parameters for efficient array manipulation. Path validation includes:
+   - Absolute path requirement (or tilde expansion)
+   - Duplicate detection
+   - System directory warnings (/etc, /usr, etc.)
+   - Directory existence verification
+
+   Argument parsing collects all non-flag arguments after `--add-dir` until hitting another flag or the `shell` command.
+
 ## Implementation Details
 
 ### File Responsibilities
@@ -42,7 +50,8 @@ Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Com
 
 ### Mount Points
 ```bash
-/workspace              # Project directory (main mount)
+/workspace              # Project directory (main mount, always current directory)
+/<directory_name>       # Additional directories (via --add-dir flag, using folder basenames e.g., /foo, /bar)
 /home/claude/.ssh       # SSH keys from ~/.agentbox/ssh/
 /home/claude/.gitconfig # Git config (read-only)
 /home/claude/.npm       # NPM cache
@@ -102,7 +111,8 @@ The `agentbox` script has these key functions:
 - `needs_rebuild()`: Compare hashes with image label
 - `build_image()`: Docker build with proper args
 - `cleanup_old_containers()`: Remove containers using old images
-- `run_container()`: Main container execution logic
+- `mount_additional_dirs()`: Mount extra directories with intuitive folder names (e.g., /foo, /bar)
+- `run_container()`: Main container execution logic with directory collection (includes inline path validation)
 - `ssh_setup()`: Initialize ~/.agentbox/ssh/ directory
 
 ## Critical Implementation Notes

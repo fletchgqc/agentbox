@@ -89,7 +89,7 @@ fi
 if [ -t 0 ] && [ -t 1 ]; then
     echo "🤖 AgentBox Development Environment"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "📁 Workspace: /workspace"
+    echo "📁 Project Directory: /workspace"
     echo "🐍 Python: $(python3 --version 2>&1 | cut -d' ' -f2) (uv available)"
     echo "🟢 Node.js: $(node --version 2>/dev/null || echo 'not found')"
     echo "☕ Java: $(java -version 2>&1 | head -1 | cut -d'"' -f2 || echo 'not found')"
