@@ -17,7 +17,7 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 ## Requirements
 
 - **Docker**: Must be installed and running
-- **Bash 4.0+**: macOS users need to install via Homebrew (`brew install bash`) as macOS ships with Bash 3.2
+- **Bash 4.0+**: macOS ships with Bash 3.2, I recommend upgrading via Homebrew (`brew install bash`).
 
 ## Installation
 
@@ -195,7 +195,6 @@ AgentBox began as a simplified replacement for [ClaudeBox](https://github.com/Rc
 | Files | 3 core files | 20+ files |
 | Profiles | Single unified image | 20+ language profiles |
 | Container Management | Simple per-project | Advanced slot system |
-| Bash Compatibility | Bash 4.0+ required | Bash 3.2 supported |
 | Setup | Automatic | Manual configuration |
 
 ## Support and Contributing

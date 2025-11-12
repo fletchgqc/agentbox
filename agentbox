@@ -5,9 +5,11 @@
 set -euo pipefail
 
 if ((BASH_VERSINFO[0] < 4)); then
-    echo "Error: Bash 4.0 or later required (found ${BASH_VERSION})" >&2
-    echo "Due to GPL licensing, macOS ships with 3.2, which is archaic. This project requires 4.0+ to simplify the code."
-    echo "macOS users: brew install bash" >&2
+    echo "Error: Bash 4.0 or later required (found ${BASH_VERSION}). This project requires 4.0+ to simplify the code." >&2
+    if [[ $OSTYPE == darwin* ]]; then
+        echo "Due to GPL licensing, macOS ships with Bash 3.2, which is archaic." >&2
+        echo "Try: brew install bash, then ensure /opt/homebrew/bin is in your PATH" >&2
+    fi
     exit 1
 fi
 
