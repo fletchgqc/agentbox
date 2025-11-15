@@ -89,6 +89,10 @@ Note that Claude will convert your git remotes to https, ssh remotes don't work 
 ### GitLab
  The `glab` tool is included in the image. You can use it with a GitLab token for API operations, but not for git operations as far as I know. So for GitLab I recommend the SSH configuration detailed below.
 
+## Git Configuration
+
+AgentBox copies your host `~/.gitconfig` into the container on each startup. If you don't have a host gitconfig, it uses `claude@agentbox` as the default identity.
+
 ## SSH Configuration
 
 AgentBox uses a dedicated SSH directory (`~/.agentbox/ssh/`) isolated from your main SSH keys:

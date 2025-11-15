@@ -59,16 +59,18 @@ if [ -d "/tmp/host_direnv_allow" ] && [ -f "/workspace/.envrc" ] && [ -n "$HOST_
     fi
 fi
 
-# Ensure git config is set (for commits inside container)
-if [ -z "$(git config --global user.email)" ]; then
-    # Try to copy from mounted .gitconfig if available
-    if [ -f "/home/claude/.gitconfig" ]; then
-        git config --global user.email "$(git config --file /home/claude/.gitconfig user.email 2>/dev/null || echo 'claude@agentbox')"
-        git config --global user.name "$(git config --file /home/claude/.gitconfig user.name 2>/dev/null || echo 'Claude (AgentBox)')"
-    else
-        git config --global user.email "claude@agentbox"
-        git config --global user.name "Claude (AgentBox)"
-    fi
+# Set up git config for commits inside container
+if [ -f "/tmp/host_gitconfig" ]; then
+    cp /tmp/host_gitconfig /home/claude/.gitconfig
+else
+    cat > /home/claude/.gitconfig << 'EOF'
+[user]
+    email = claude@agentbox
+    name = Claude (AgentBox)
+[init]
+    defaultBranch = main
+EOF
+    echo "ℹ️  Using default git identity (claude@agentbox). Configure ~/.gitconfig on host to customize."
 fi
 
 # Check if project has MCP servers and show reminder

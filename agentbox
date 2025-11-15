@@ -155,9 +155,9 @@ run_container() {
         -v "$PROJECT_DIR:/workspace:z"
     )
 
-    # Mount .gitconfig if it exists
+    # Mount .gitconfig to temp location for copying (if it exists)
     if [[ -f "${HOME}/.gitconfig" ]]; then
-        mount_opts+=(-v "${HOME}/.gitconfig:/home/claude/.gitconfig:ro")
+        mount_opts+=(-v "${HOME}/.gitconfig:/tmp/host_gitconfig:ro")
     fi
 
     # Mount dedicated AgentBox SSH directory
