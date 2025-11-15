@@ -65,10 +65,10 @@ if [ -f "/tmp/host_gitconfig" ]; then
 else
     cat > /home/claude/.gitconfig << 'EOF'
 [user]
-	email = claude@agentbox
-	name = Claude (AgentBox)
+    email = claude@agentbox
+    name = Claude (AgentBox)
 [init]
-	defaultBranch = main
+    defaultBranch = main
 EOF
     echo "ℹ️  Using default git identity (claude@agentbox). Configure ~/.gitconfig on host to customize."
 fi
