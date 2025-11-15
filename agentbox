@@ -163,17 +163,6 @@ run_container() {
     local container_name="$1"
     shift
 
-    # Extract port mappings (passed as first arg if present)
-    declare -a ports=()
-    if [[ "${1:-}" == "--ports" ]]; then
-        shift
-        # Read ports until we hit a non-port argument
-        while [[ $# -gt 0 ]] && [[ "$1" != -* ]] && [[ "$1" != "shell" ]]; do
-            ports+=("$1")
-            shift
-        done
-    fi
-
     # Check if first arg is "shell" mode
     local shell_mode=false
     local admin_mode=false
@@ -521,12 +510,12 @@ main() {
     # Run or attach to container
     if [[ "$shell_mode" == "true" ]]; then
         if [[ "$admin_mode" == "true" ]]; then
-            run_container "$container_name" --ports "${ports[@]}" "shell" "--admin" "${cmd_args[@]}"
+            run_container "$container_name" "shell" "--admin" "${cmd_args[@]}"
         else
-            run_container "$container_name" --ports "${ports[@]}" "shell" "${cmd_args[@]}"
+            run_container "$container_name" "shell" "${cmd_args[@]}"
         fi
     else
-        run_container "$container_name" --ports "${ports[@]}" "${cmd_args[@]}"
+        run_container "$container_name" "${cmd_args[@]}"
     fi
 }
 
