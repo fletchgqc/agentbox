@@ -17,6 +17,11 @@ if [ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
     source "$HOME/.sdkman/bin/sdkman-init.sh"
 fi
 
+# Source Rust cargo environment if available
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env"
+fi
+
 # Create Python virtual environment if it doesn't exist in the project
 if [ ! -d "/workspace/.venv" ] && [ -f "/workspace/requirements.txt" -o -f "/workspace/pyproject.toml" -o -f "/workspace/setup.py" ]; then
     echo "🐍 Python project detected, creating virtual environment..."
@@ -93,6 +98,7 @@ if [ -t 0 ] && [ -t 1 ]; then
     echo "🐍 Python: $(python3 --version 2>&1 | cut -d' ' -f2) (uv available)"
     echo "🟢 Node.js: $(node --version 2>/dev/null || echo 'not found')"
     echo "☕ Java: $(java -version 2>&1 | head -1 | cut -d'"' -f2 || echo 'not found')"
+    echo "🦀 Rust: $(rustc --version 2>/dev/null | cut -d' ' -f2 || echo 'not found')"
     echo "🤖 Claude CLI: $(claude --version 2>/dev/null || echo 'not found - check installation')"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""

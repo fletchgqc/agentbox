@@ -131,6 +131,14 @@ RUN /home/${USERNAME}/.local/bin/uv tool install black && \
     /home/${USERNAME}/.local/bin/uv tool install poetry && \
     /home/${USERNAME}/.local/bin/uv tool install pipenv
 
+# Install Rust toolchain via rustup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable && \
+    echo 'source "$HOME/.cargo/env"' >> ~/.bashrc && \
+    echo 'source "$HOME/.cargo/env"' >> ~/.zshrc && \
+    bash -c "source $HOME/.cargo/env && \
+        rustup component add rustfmt clippy rust-analyzer && \
+        cargo install cargo-edit cargo-watch"
+
 # Install oh-my-zsh for better shell experience and setup NVM for zsh
 RUN sh -c "$(wget -O- https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended && \
     sed -i 's/ZSH_THEME=".*"/ZSH_THEME="robbyrussell"/' ~/.zshrc && \
