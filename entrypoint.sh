@@ -3,6 +3,14 @@
 
 set -e
 
+# Setup trap to show firewall summary on exit (if firewall enabled)
+show_firewall_summary() {
+  if [ "${AGENTBOX_FIREWALL:-enabled}" != "disabled" ]; then
+    /usr/local/bin/firewall-summary.sh 2>/dev/null || true
+  fi
+}
+trap show_firewall_summary EXIT
+
 # Ensure proper PATH
 export PATH="$HOME/.local/bin:$PATH"
 
@@ -87,6 +95,15 @@ if [ -t 0 ]; then
     eval $(resize 2>/dev/null || true)
 fi
 
+# Initialize firewall if enabled (requires NET_ADMIN capability)
+if [ "${AGENTBOX_FIREWALL:-enabled}" != "disabled" ]; then
+    if /usr/local/bin/firewall.sh 2>&1; then
+        echo ""
+    else
+        echo "⚠️  Firewall initialization failed - network is unrestricted"
+    fi
+fi
+
 # If running interactively, show welcome message
 if [ -t 0 ] && [ -t 1 ]; then
     echo "🤖 AgentBox Development Environment"
@@ -96,6 +113,9 @@ if [ -t 0 ] && [ -t 1 ]; then
     echo "🟢 Node.js: $(node --version 2>/dev/null || echo 'not found')"
     echo "☕ Java: $(java -version 2>&1 | head -1 | cut -d'"' -f2 || echo 'not found')"
     echo "🤖 Claude CLI: $(claude --version 2>/dev/null || echo 'not found - check installation')"
+    if [ "${AGENTBOX_FIREWALL:-enabled}" != "disabled" ]; then
+        echo "🔒 Network: Restricted (firewall active)"
+    fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 fi

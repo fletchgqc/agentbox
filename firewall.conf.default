@@ -1,0 +1,55 @@
+# AgentBox Firewall Configuration
+# Location: ~/.agentbox/firewall.conf
+#
+# This file controls which network services the AgentBox container can access.
+# The firewall is enabled by default to provide network isolation.
+#
+# FORMAT
+# ------
+# domain [options]
+#
+# OPTIONS
+# -------
+# critical   - Container fails to start if this service can't be resolved
+# wide-net   - Allows entire /24 subnet (for services with frequently changing IPs)
+#
+# DISABLING THE FIREWALL
+# -----------------------
+# For a single run:    AGENTBOX_FIREWALL=disabled agentbox
+# Permanently:         export AGENTBOX_FIREWALL=disabled  (add to shell profile)
+#
+# HARDCODED RANGES
+# ----------------
+# GitHub IP ranges are always allowed (hardcoded, not via DNS) to ensure
+# reliable access even if DNS resolution fails.
+
+# ============================================================================
+# CRITICAL SERVICES (container fails if these can't be resolved)
+# ============================================================================
+
+github.com critical
+api.github.com critical
+api.anthropic.com critical
+
+# ============================================================================
+# PACKAGE REGISTRIES
+# ============================================================================
+
+# npm
+registry.npmjs.org
+
+# Maven (wide-net due to frequent IP changes)
+repo.maven.apache.org wide-net
+repo1.maven.org wide-net
+
+# Gradle
+plugins.gradle.org
+
+# ============================================================================
+# CUSTOM SERVICES (add your own below)
+# ============================================================================
+
+# Examples:
+# my-api.example.com
+# my-cdn.example.com wide-net
+# my-auth-server.example.com critical

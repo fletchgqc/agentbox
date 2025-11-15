@@ -24,6 +24,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         zsh bash-completion locales \
         # Network tools
         openssh-client netcat-openbsd socat dnsutils iputils-ping \
+        # Firewall tools
+        iptables ipset iproute2 \
         # Archive tools
         zip unzip tar gzip bzip2 xz-utils \
         # JSON/YAML tools
@@ -195,9 +197,11 @@ RUN mkdir -p /home/${USERNAME}/workspace
 # Switch back to root for entrypoint setup
 USER root
 
-# Copy entrypoint script
+# Copy entrypoint and firewall scripts
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY firewall.sh /usr/local/bin/firewall.sh
+COPY firewall-summary.sh /usr/local/bin/firewall-summary.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/firewall.sh /usr/local/bin/firewall-summary.sh
 
 # Set working directory
 WORKDIR /workspace

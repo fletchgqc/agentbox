@@ -13,6 +13,7 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 - **Persistent Data**: Package caches and shell history persist between sessions
 - **Claude CLI Integration**: Built-in support for Claude CLI with per-project authentication
 - **SSH Support**: Dedicated SSH directory for secure Git operations
+- **Network Firewall**: Restrict container network access to approved services (enabled by default, easily customizable)
 
 ## Requirements
 
@@ -111,6 +112,63 @@ This will:
 If a `.env` file exists in your project directory, the environment variables defined there will automatically be loaded into the container.
 
 AgentBox also includes `direnv` support - if you have a `.envrc` file in your project directory, it will be automatically evaluated inside the container if you have `direnv allow`ed it on your host machine.
+
+## Network Firewall
+
+AgentBox includes a network firewall (enabled by default) to restrict container network access to approved services only. The container can only reach:
+
+- GitHub (API and Git operations)
+- Package registries (npm, Maven, Gradle)
+- Claude API
+- Container's own network (Docker internal communication)
+
+All other outbound network access is blocked.
+
+### Customizing Allowed Services
+
+Edit `~/.agentbox/firewall.conf` to add/remove allowed services. This file is automatically created on first run with sensible defaults.
+
+**Adding a service**:
+```bash
+# Edit the config file
+echo "my-api.example.com" >> ~/.agentbox/firewall.conf
+
+# Restart container (no rebuild needed)
+./agentbox
+```
+
+**Configuration format**:
+```
+# domain [options]
+github.com critical
+my-api.example.com
+my-cdn.example.com wide-net
+```
+
+**Options**:
+- `critical` - Container fails to start if this service can't be resolved
+- `wide-net` - Allows entire /24 subnet (for services with frequently changing IPs like Maven repos)
+
+### Disabling the Firewall
+
+```bash
+# Disable for a single run
+AGENTBOX_FIREWALL=disabled agentbox
+
+# Disable by default (add to shell profile)
+export AGENTBOX_FIREWALL=disabled
+```
+
+### Technical Details
+
+The firewall uses iptables with ipset for efficient IP whitelisting. It:
+- Enabled by default on container startup
+- Configuration: `~/.agentbox/firewall.conf`
+- Hardcoded GitHub IP ranges (ensures access even if DNS fails)
+- Validates connectivity to critical services at startup
+- Fails fast if critical services are unreachable
+- No rebuild required when changing configuration
+- Logs blocked connections and shows summary on exit
 
 ## MCP Server Configuration
 

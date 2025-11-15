@@ -217,6 +217,28 @@ run_container() {
 
     log_info "Claude CLI configuration mounted"
 
+    # Setup network firewall (enabled by default)
+    local firewall_opts=()
+    local firewall_config="${HOME}/.agentbox/firewall.conf"
+
+    if [[ "${AGENTBOX_FIREWALL:-enabled}" != "disabled" ]]; then
+        # Create default config if it doesn't exist
+        if [[ ! -f "$firewall_config" ]]; then
+            mkdir -p "${HOME}/.agentbox"
+            cp "${SCRIPT_DIR}/firewall.conf.default" "$firewall_config"
+            log_info "Created default firewall configuration: $firewall_config"
+            log_info "Edit this file to customize network access"
+            log_info "To disable firewall: AGENTBOX_FIREWALL=disabled agentbox"
+        fi
+
+        # Mount config and add capabilities
+        mount_opts+=(-v "${firewall_config}:/tmp/firewall.conf:ro")
+        firewall_opts+=(--cap-add=NET_ADMIN --cap-add=NET_RAW)
+        log_info "Network firewall enabled (config: ~/.agentbox/firewall.conf)"
+    else
+        log_warning "Network firewall disabled - container has unrestricted network access"
+    fi
+
     # Mount project directory path info for direnv approval translation
     if [[ -f "$PROJECT_DIR/.envrc" ]]; then
         # Pass the host project directory path as an environment variable
@@ -261,6 +283,7 @@ run_container() {
         --hostname "agentbox-$PROJECT_NAME" \
         "${mount_opts[@]}" \
         "${env_file_args[@]}" \
+        "${firewall_opts[@]}" \
         -w /workspace \
         --init \
         "$IMAGE_NAME" \
