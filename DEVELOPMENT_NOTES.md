@@ -101,7 +101,6 @@ The `agentbox` script has these key functions:
 - `calculate_hash()`: SHA256 hash for change detection
 - `needs_rebuild()`: Compare hashes with image label
 - `build_image()`: Docker build with proper args
-- `cleanup_old_containers()`: Remove containers using old images
 - `run_container()`: Main container execution logic
 - `ssh_setup()`: Initialize ~/.agentbox/ssh/ directory
 
