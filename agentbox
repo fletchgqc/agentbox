@@ -255,10 +255,28 @@ run_container() {
         log_info ".env file found and will be loaded into container"
     fi
 
+    # Build port forwarding arguments
+    local port_args=()
+    for port in "${ports[@]}"; do
+        # Support both "3002" and "3002:8080" syntax
+        if [[ "$port" =~ ^[0-9]+$ ]]; then
+            # Simple port number - map to same port
+            port_args+=(-p "${port}:${port}")
+            log_info "Port forwarding: ${port} -> ${port}"
+        elif [[ "$port" =~ ^[0-9]+:[0-9]+$ ]]; then
+            # host:container syntax
+            port_args+=(-p "${port}")
+            log_info "Port forwarding: ${port}"
+        else
+            log_warning "Invalid port format: ${port} (use '3002' or '3002:8080')"
+        fi
+    done
+
     # Run ephemeral container with --rm
     docker run -it --rm \
         --name "$container_name" \
         --hostname "agentbox-$PROJECT_NAME" \
+        "${port_args[@]}" \
         "${mount_opts[@]}" \
         "${env_file_args[@]}" \
         -w /workspace \
@@ -276,13 +294,14 @@ Usage:
     agentbox [OPTIONS] [COMMAND]
 
 Options:
-    -h, --help      Show this help message
-    --cleanup       Remove AgentBox image and cached data
-    --rebuild       Force rebuild of the image
+    -h, --help              Show this help message
+    -p PORT                 Forward a port from host to container (can be used multiple times)
+    --cleanup               Remove AgentBox image and cached data
+    --rebuild               Force rebuild of the image
 
 Commands:
-    shell [--admin] Start interactive shell instead of Claude CLI
-    ssh-init        Initialize SSH directory for AgentBox
+    shell [--admin]         Start interactive shell instead of Claude CLI
+    ssh-init                Initialize SSH directory for AgentBox
 
     If no command is provided, Claude CLI will be started automatically.
     Use 'shell' command to get a shell instead of Claude CLI.
@@ -290,13 +309,15 @@ Commands:
     Other commands will be executed inside the container.
 
 Examples:
-    agentbox                    # Start Claude CLI for current project
-    agentbox shell              # Start interactive shell instead of Claude
-    agentbox shell --admin      # Start admin shell with sudo access
-    agentbox python script.py   # Run Python script in container
-    agentbox --cleanup          # Remove image and optionally cached data
-    agentbox --rebuild          # Force rebuild image
-    agentbox ssh-init           # Set up SSH for AgentBox
+    agentbox                            # Start Claude CLI for current project
+    agentbox -p 3002                    # Forward port 3002
+    agentbox -p 3002:8080               # Map host port 3002 to container port 8080
+    agentbox shell                      # Start interactive shell instead of Claude
+    agentbox shell --admin              # Start admin shell with sudo access
+    agentbox python script.py           # Run Python script in container
+    agentbox --cleanup                  # Remove image and optionally cached data
+    agentbox --rebuild                  # Force rebuild image
+    agentbox ssh-init                   # Set up SSH for AgentBox
 
 Containers are ephemeral and automatically removed when you exit.
 Package caches and shell history persist between sessions.
@@ -376,6 +397,7 @@ main() {
     local shell_mode=false
     local admin_mode=false
     local cmd_args=()
+    declare -a ports=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -389,6 +411,15 @@ main() {
                 ;;
             --rebuild)
                 force_rebuild=true
+                shift
+                ;;
+            -p)
+                shift
+                if [[ -z "${1:-}" ]]; then
+                    log_error "Port argument requires a value"
+                    exit 1
+                fi
+                ports+=("$1")
                 shift
                 ;;
             shell)
