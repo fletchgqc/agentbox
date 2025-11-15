@@ -117,7 +117,6 @@ build_image() {
         "$SCRIPT_DIR" ; then
         log_success "Image built successfully!"
 
-        # Clean up any dangling agentbox images to prevent accumulation
         log_info "Cleaning up dangling images..."
         docker image prune -f --filter "label=agentbox.version" &>/dev/null || true
 
