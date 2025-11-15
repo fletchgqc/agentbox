@@ -357,7 +357,6 @@ Commands:
 Examples:
     agentbox                            # Start Claude CLI for current project
     agentbox -p 3002                    # Forward port 3002
-    agentbox -p 3000 -p 8080            # Forward multiple ports
     agentbox -p 3002:8080               # Map host port 3002 to container port 8080
     agentbox shell                      # Start interactive shell instead of Claude
     agentbox shell --admin              # Start admin shell with sudo access
