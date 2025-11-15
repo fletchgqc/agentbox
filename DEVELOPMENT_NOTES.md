@@ -35,15 +35,14 @@ Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Com
 
 ### Container Lifecycle
 1. Check Docker daemon
-2. Compare hashes → rebuild if needed (on rebuild: remove old image, build new one, auto-prune dangling images)
+2. Compare hashes → rebuild if needed (on rebuild: build new image, auto-prune dangling images)
 3. Run ephemeral container with all mounts
 4. Container removed automatically on exit
 
 ### Image Cleanup Strategy
 To prevent accumulation of dangling images:
-- Before rebuild: Attempt to remove old `agentbox:latest` image
-  - If image is in use by running container, it becomes dangling after new build
-- After successful rebuild: Run `docker image prune -f --filter "label=agentbox.version"` to remove any dangling agentbox images
+- When a new image is built and tagged `agentbox:latest`, the old image with that tag becomes dangling
+- After successful rebuild: Run `docker image prune -f --filter "label=agentbox.version"` to remove all dangling agentbox images
 - This ensures zero accumulation over time without manual intervention
 
 ### Mount Points

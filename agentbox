@@ -99,15 +99,6 @@ build_image() {
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
     local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
 
-    # Remove old image to prevent dangling images from accumulating
-    if docker image inspect "$IMAGE_NAME" &> /dev/null; then
-        if docker rmi "$IMAGE_NAME" &> /dev/null; then
-            log_info "Removed old image"
-        else
-            log_info "Old image in use - will be cleaned up on next rebuild"
-        fi
-    fi
-
     log_build "Building AgentBox image (this may take a few minutes on first run)..."
 
     # Get current user/group IDs
