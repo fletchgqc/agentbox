@@ -320,6 +320,7 @@ run_container() {
     # Run ephemeral container with --rm
     docker run -it --rm \
         --name "$container_name" \
+        --hostname "agentbox-$PROJECT_NAME" \
         "${port_args[@]}" \
         "${mount_opts[@]}" \
         "${env_file_args[@]}" \
