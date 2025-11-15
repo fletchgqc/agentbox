@@ -40,10 +40,7 @@ Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Com
 4. Container removed automatically on exit
 
 ### Image Cleanup Strategy
-To prevent accumulation of dangling images:
-- When a new image is built and tagged `agentbox:latest`, the old image with that tag becomes dangling
-- After successful rebuild: Run `docker image prune -f --filter "label=agentbox.version"` to remove all dangling agentbox images
-- This ensures zero accumulation over time without manual intervention
+After each successful rebuild, `docker image prune -f --filter "label=agentbox.version"` removes dangling agentbox images. This prevents accumulation over time without manual intervention.
 
 ### Mount Points
 ```bash
