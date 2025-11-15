@@ -341,7 +341,7 @@ Usage:
 Options:
     -h, --help              Show this help message
     -p, --port PORT         Forward a port from host to container (can be used multiple times)
-                            Supports '3002' (maps to same port) or '3002:8080' (host:container)
+    -p PORT                     Forward a port from host to container (can be used multiple times)
     --cleanup               Remove AgentBox image and cached data
     --rebuild               Force rebuild of the image
 
