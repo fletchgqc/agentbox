@@ -116,45 +116,11 @@ build_image() {
         -t "$IMAGE_NAME" \
         "$SCRIPT_DIR" ; then
         log_success "Image built successfully!"
+        docker image prune -f --filter "label=agentbox.version" &>/dev/null || true
         return 0
     else
         log_error "Failed to build image"
         return 1
-    fi
-}
-
-# Cleanup old containers using outdated image
-cleanup_old_containers() {
-    log_info "Checking for containers using outdated image..."
-
-    # Get the current image ID
-    local current_image_id=$(docker inspect "$IMAGE_NAME" --format '{{ .Id }}' 2>/dev/null || echo "none")
-
-    if [[ "$current_image_id" == "none" ]]; then
-        return
-    fi
-
-    # Find all agentbox containers
-    local containers=$(docker ps -a --format '{{.Names}}' | grep "^${CONTAINER_PREFIX}-" || true)
-
-    if [[ -z "$containers" ]]; then
-        return
-    fi
-
-    local cleaned_count=0
-
-    for container in $containers; do
-        local container_image_id=$(docker inspect "$container" --format '{{ .Image }}' 2>/dev/null || echo "none")
-
-        if [[ "$container_image_id" != "$current_image_id" ]]; then
-            log_warning "Removing outdated container: $container"
-            docker rm -f "$container" &> /dev/null || true
-            ((cleaned_count++))
-        fi
-    done
-
-    if [[ $cleaned_count -gt 0 ]]; then
-        log_success "Cleaned up $cleaned_count outdated container(s)"
     fi
 }
 

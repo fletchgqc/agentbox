@@ -35,10 +35,12 @@ Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Com
 
 ### Container Lifecycle
 1. Check Docker daemon
-2. Compare hashes → rebuild if needed
-3. Clean up old containers using outdated image
-4. Run ephemeral container with all mounts
-5. Container removed automatically on exit
+2. Compare hashes → rebuild if needed (on rebuild: build new image, auto-prune dangling images)
+3. Run ephemeral container with all mounts
+4. Container removed automatically on exit
+
+### Image Cleanup Strategy
+After each successful rebuild, `docker image prune -f --filter "label=agentbox.version"` removes dangling agentbox images. This prevents accumulation over time without manual intervention.
 
 ### Mount Points
 ```bash
@@ -49,8 +51,7 @@ Uses SHA256 hash of Dockerfile + entrypoint.sh stored as Docker image label. Com
 /home/claude/.cache/pip # Pip cache
 /home/claude/.m2        # Maven cache
 /home/claude/.gradle    # Gradle cache
-/home/claude/.zsh_history   # ZSH history
-/home/claude/.bash_history  # Bash history
+/home/claude/.shell_history  # History directory (HISTFILE env var points to zsh_history inside)
 /home/claude/.claude    # Claude config (Docker volume)
 ```
 
@@ -101,7 +102,6 @@ The `agentbox` script has these key functions:
 - `calculate_hash()`: SHA256 hash for change detection
 - `needs_rebuild()`: Compare hashes with image label
 - `build_image()`: Docker build with proper args
-- `cleanup_old_containers()`: Remove containers using old images
 - `run_container()`: Main container execution logic
 - `ssh_setup()`: Initialize ~/.agentbox/ssh/ directory
 
