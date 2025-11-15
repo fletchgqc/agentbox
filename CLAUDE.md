@@ -12,6 +12,8 @@ Comments are still added when they contribute to much faster, better understandi
 - To explain why something was done, when it is not apparent from the context.
 - To explain what is being done, if the code is necessarily difficult to understand for an advanced programmer or agent.
 
+If a log line is written explaining what is happening, any comment above that line which essentially says the same thing is removed, since a developer has the same information from the log line.
+
 Developers challenge comments to ensure they match the criteria. Existing comments are cleaned up according to the boy-scout rule.
 
 ## Documentation
