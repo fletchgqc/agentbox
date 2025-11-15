@@ -340,8 +340,7 @@ Usage:
 
 Options:
     -h, --help              Show this help message
-    -p, --port PORT         Forward a port from host to container (can be used multiple times)
-    -p PORT                     Forward a port from host to container (can be used multiple times)
+    -p PORT                 Forward a port from host to container (can be used multiple times)
     --cleanup               Remove AgentBox image and cached data
     --rebuild               Force rebuild of the image
 
@@ -459,7 +458,7 @@ main() {
                 force_rebuild=true
                 shift
                 ;;
-            -p|--port)
+            -p)
                 shift
                 if [[ -z "${1:-}" ]]; then
                     log_error "Port argument requires a value"
