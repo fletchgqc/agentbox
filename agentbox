@@ -168,7 +168,7 @@ run_container() {
     if [[ "${1:-}" == "--ports" ]]; then
         shift
         # Read ports until we hit a non-port argument
-        while [[ $# -gt 0 ]] && [[ "$1" != "shell" ]]; do
+        while [[ $# -gt 0 ]] && [[ "$1" != -* ]] && [[ "$1" != "shell" ]]; do
             ports+=("$1")
             shift
         done
