@@ -124,10 +124,120 @@ build_image() {
     fi
 }
 
+expand_tilde() {
+    local path="$1"
+    if [[ "$path" =~ ^~ ]]; then
+        echo "${path/#\~/$HOME}"
+    else
+        echo "$path"
+    fi
+}
+
+has_path_traversal() {
+    local path="$1"
+    [[ "$path" =~ \.\. ]]
+}
+
+is_absolute_path() {
+    local path="$1"
+    [[ "$path" =~ ^/ ]]
+}
+
+is_critical_system_dir() {
+    local path="$1"
+    [[ "$path" =~ ^/(bin|sbin|boot|lib|lib64)(/|$) ]]
+}
+
+is_system_dir() {
+    local path="$1"
+    [[ "$path" =~ ^/(etc|var|usr|sys|proc|dev)(/|$) ]]
+}
+
+is_duplicate_dir() {
+    local path="$1"
+    local -n check_dirs_ref=$2
+
+    for existing_dir in "${check_dirs_ref[@]}"; do
+        if [[ "$path" == "$existing_dir" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+validate_dir_path() {
+    local dir="$1"
+    local -n validated_dirs_ref=$2
+
+    dir=$(expand_tilde "$dir")
+
+    if has_path_traversal "$dir"; then
+        log_error "Path traversal not allowed: $dir"
+        return 1
+    fi
+
+    if ! is_absolute_path "$dir"; then
+        log_error "Directory must be absolute path: $dir"
+        return 1
+    fi
+
+    if [[ ! -d "$dir" ]]; then
+        log_error "Directory not found: $dir"
+        return 1
+    fi
+
+    local dir_realpath
+    dir_realpath=$(realpath "$dir" 2>/dev/null) || {
+        log_error "Cannot resolve path: $dir"
+        return 1
+    }
+
+    if is_critical_system_dir "$dir_realpath"; then
+        log_error "Mounting critical system directory not allowed: $dir_realpath"
+        return 1
+    fi
+
+    if [[ "$dir_realpath" == "$(realpath "$PROJECT_DIR")" ]]; then
+        log_warning "Skipping duplicate: $dir (already mounted as /workspace)"
+        return 0  # Not an error, just skip
+    fi
+
+    if is_duplicate_dir "$dir_realpath" validated_dirs_ref; then
+        log_warning "Skipping duplicate directory: $dir"
+        return 0  # Not an error, just skip
+    fi
+
+    if is_system_dir "$dir_realpath"; then
+        log_warning "Mounting system directory: $dir_realpath (proceed with caution)"
+    fi
+
+    validated_dirs_ref+=("$dir_realpath")
+    return 0
+}
+
+# Mount additional dirs to Docker mount options
+mount_additional_dirs() {
+    local -n mount_opts_ref=$1
+    shift
+    local extra_dirs=("$@")
+
+    # Return early if no dirs to mount
+    if [[ ${#extra_dirs[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    for extra_dir in "${extra_dirs[@]}"; do
+        local dir_name=$(basename "$extra_dir")
+        mount_opts_ref+=(-v "$extra_dir:/${dir_name}:z")
+        log_info "Mounting additional directory: $extra_dir -> /${dir_name}"
+    done
+}
+
 # Run container with --rm (ephemeral)
 run_container() {
     local container_name="$1"
-    shift
+    local -n extra_dirs_ref=$2
+    shift 2
 
     # Check if first arg is "shell" mode
     local shell_mode=false
@@ -154,6 +264,8 @@ run_container() {
     local mount_opts=(
         -v "$PROJECT_DIR:/workspace:z"
     )
+
+    mount_additional_dirs mount_opts "${extra_dirs_ref[@]}"
 
     # Mount .gitconfig to temp location for copying (if it exists)
     if [[ -f "${HOME}/.gitconfig" ]]; then
@@ -298,6 +410,7 @@ Options:
     -p PORT                 Forward a port from host to container (can be used multiple times)
     --cleanup               Remove AgentBox image and cached data
     --rebuild               Force rebuild of the image
+    --add-dir DIR           Mount additional directory (can be used multiple times)
 
 Commands:
     shell [--admin]         Start interactive shell instead of Claude CLI
@@ -314,6 +427,7 @@ Examples:
     agentbox -p 3002:8080               # Map host port 3002 to container port 8080
     agentbox shell                      # Start interactive shell instead of Claude
     agentbox shell --admin              # Start admin shell with sudo access
+    agentbox --add-dir ~/1 --add-dir ~/2  # Add dirs with Claude CLI
     agentbox python script.py           # Run Python script in container
     agentbox --cleanup                  # Remove image and optionally cached data
     agentbox --rebuild                  # Force rebuild image
@@ -321,6 +435,9 @@ Examples:
 
 Containers are ephemeral and automatically removed when you exit.
 Package caches and shell history persist between sessions.
+
+Additional directories are mounted using their folder names (e.g., /foo, /bar).
+The current directory is always mounted as /workspace.
 EOF
 }
 
@@ -398,6 +515,7 @@ main() {
     local admin_mode=false
     local cmd_args=()
     declare -a ports=()
+    local extra_dirs=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -420,6 +538,15 @@ main() {
                     exit 1
                 fi
                 ports+=("$1")
+                shift
+                ;;
+            --add-dir)
+                shift
+                if [[ -z "${1:-}" ]]; then
+                    log_error "--add-dir requires a directory path"
+                    exit 1
+                fi
+                extra_dirs+=("$1")
                 shift
                 ;;
             shell)
@@ -457,6 +584,14 @@ main() {
     # Get container name for current project
     local container_name=$(get_container_name)
 
+    # Validate dir paths
+    local validated_dirs=()
+    for dir in "${extra_dirs[@]}"; do
+        if ! validate_dir_path "$dir" validated_dirs; then
+            # Validation failed - critical error already logged, exit
+            exit 1
+        fi
+    done
 
     # Check if rebuild is needed or forced
     if [[ "$force_rebuild" == "true" ]] || needs_rebuild; then
@@ -476,12 +611,12 @@ main() {
     # Run or attach to container
     if [[ "$shell_mode" == "true" ]]; then
         if [[ "$admin_mode" == "true" ]]; then
-            run_container "$container_name" "shell" "--admin" "${cmd_args[@]}"
+            run_container "$container_name" validated_dirs "shell" "--admin" "${cmd_args[@]}"
         else
-            run_container "$container_name" "shell" "${cmd_args[@]}"
+            run_container "$container_name" validated_dirs "shell" "${cmd_args[@]}"
         fi
     else
-        run_container "$container_name" "${cmd_args[@]}"
+        run_container "$container_name" validated_dirs "${cmd_args[@]}"
     fi
 }
 

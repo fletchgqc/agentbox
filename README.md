@@ -7,6 +7,7 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 ## Features
 
 - **Shares project directory with host**: Maps a volume with the source code so that you can see and modify the agent's changes on the host machine - just like if you were running Claude without a container.
+- **Multi-Directory Support**: Mount additional project directories for cross-project development
 - **Unified Development Environment**: Single Docker image with Python, Node.js, Java, and Shell support
 - **Automatic Rebuilds**: Detects changes to Dockerfile/entrypoint and rebuilds automatically
 - **Per-Project Isolation**: Each project directory gets its own isolated container environment
@@ -18,6 +19,27 @@ A Docker-based development environment for running Claude CLI in a more safe, is
 
 - **Docker**: Must be installed and running
 - **Bash 4.0+**: macOS ships with Bash 3.2, I recommend upgrading via Homebrew (`brew install bash`).
+
+## Multi-Directory Support
+
+AgentBox supports mounting additional directories for scenarios where your agent needs access to multiple projects:
+
+```bash
+# Mount a single additional directory
+agentbox --add-dir ~/other-project
+
+# Mount multiple directories (repeatable flag)
+agentbox --add-dir ~/proj1 --add-dir ~/proj2 --add-dir ~/proj3
+
+# Works with shell mode too
+agentbox --add-dir ~/library-code shell
+```
+
+**How it works:**
+- Your current directory is always mounted as `/workspace`
+- Additional directories are mounted using their folder names (e.g., `/foo`, `/bar`)
+- All directories are writable - changes sync back to the host
+- The mounting order follows the order you specify in the flag
 
 ## Installation
 
@@ -38,6 +60,9 @@ agentbox
 # Non-agentbox CLI flags are passed through to claude.
 # For example, to continue the most recent session
 agentbox -c
+
+# Mount additional directories for multi-project access
+agentbox --add-dir ~/proj1 --add-dir ~/proj2  # Multiple directories
 
 # Start shell with sudo privileges
 agentbox shell --admin
@@ -77,7 +102,7 @@ The unified Docker image includes:
 
 ## Authenticating to Git or other SCC Providers
 
-### GitHub 
+### GitHub
 The `gh` tool is included in the image and can be used for all GitHub operations. My recommendation:
 - Visit this link to configure a [fine-grained access-token](https://github.com/settings/personal-access-tokens/new?name=MyRepo-AI&description=For%20AI%20Agent%20Usage&contents=write&pull_requests=write&issues=write) with a sensible set of permissions predefined.
 - On that page, restrict the token to the project repository.
