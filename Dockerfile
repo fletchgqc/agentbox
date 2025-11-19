@@ -199,6 +199,10 @@ USER root
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# Copy claude wrapper script to make it available on PATH for Docker Sandboxes
+COPY claude-wrapper.sh /usr/local/bin/claude
+RUN chmod +x /usr/local/bin/claude
+
 # Set working directory
 WORKDIR /workspace
 
