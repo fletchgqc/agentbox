@@ -199,6 +199,25 @@ USER root
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# Create wrapper script for claude to make it available on default PATH
+# This is needed for Docker Sandboxes which expect binaries on system PATH
+RUN cat > /usr/local/bin/claude <<'EOF'
+#!/bin/bash
+# Wrapper script to run claude with proper environment
+# Required for Docker Sandboxes compatibility
+
+# Source NVM to get node/npm on PATH
+export NVM_DIR="/home/claude/.nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+    source "$NVM_DIR/nvm.sh"
+fi
+
+# Execute the real claude binary
+exec claude "$@"
+EOF
+
+RUN chmod +x /usr/local/bin/claude
+
 # Set working directory
 WORKDIR /workspace
 
