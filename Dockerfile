@@ -109,10 +109,7 @@ RUN bash -c "source $NVM_DIR/nvm.sh && \
         prettier \
         nodemon \
         yarn \
-        pnpm \
-        @anthropic-ai/claude-code && \
-    # Verify Claude CLI installation
-    which claude && claude --version"
+        pnpm"
 
 # Install SDKMAN for Java toolchain management
 RUN curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
@@ -204,6 +201,16 @@ WORKDIR /workspace
 
 # Set the user for runtime
 USER ${USERNAME}
+
+# Install Claude as last step
+# Changing the ARG (via --build-arg) will invalidate the cache for the
+# following steps and consequently install the latest Claude version
+ARG BUILD_TIMESTAMP=unknown
+RUN bash -c "source $NVM_DIR/nvm.sh && \
+    npm install -g \
+        @anthropic-ai/claude-code && \
+    # Verify Claude CLI installation
+    which claude && claude --version"
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

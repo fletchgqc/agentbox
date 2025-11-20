@@ -106,13 +106,15 @@ build_image() {
     local group_id=$(id -g)
 
     # Build with progress output
+    local build_timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     if docker build \
         --build-arg USER_ID="${user_id}" \
         --build-arg GROUP_ID="${group_id}" \
         --build-arg USERNAME="claude" \
+        --build-arg BUILD_TIMESTAMP=${build_timestamp} \
         --label "agentbox.hash=${combined_hash}" \
         --label "agentbox.version=1.0.0" \
-        --label "agentbox.built=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --label "agentbox.built=${build_timestamp}" \
         -t "$IMAGE_NAME" \
         "$SCRIPT_DIR" ; then
         log_success "Image built successfully!"
