@@ -258,7 +258,8 @@ run_container() {
     local -n extra_dirs_to_mount=$2
     local tool="$3"
     local ignore_dot_env="$4"
-    shift 4
+    local mount_docker_socket="$5"
+    shift 5
 
     # Check if first arg is "shell" mode
     local shell_mode=false
@@ -301,6 +302,25 @@ run_container() {
         log_info "AgentBox SSH directory mounted (read-write)"
     else
         log_warning "SSH not configured. Run 'agentbox ssh-init' to enable SSH operations."
+    fi
+
+    # Mount Docker socket if requested
+    if [[ "$mount_docker_socket" == "true" ]]; then
+        if [[ "$RUNTIME" == "podman" ]]; then
+            log_error "--dangerously-mount-docker flag is not supported with Podman"
+            exit 1
+        fi
+
+        local docker_socket="${HOME}/.docker/run/docker.sock"
+        if [[ ! -S "$docker_socket" ]]; then
+            log_error "--dangerously-mount-docker requires Docker Desktop (socket not found at $docker_socket)"
+            log_error "On native Linux Docker, mounting the Docker socket grants equivalent-to-root access to the host."
+            exit 1
+        fi
+
+        mount_opts+=(-v "${docker_socket}:/var/run/docker.sock")
+        mount_opts+=(--group-add 0)
+        log_info "Docker socket mounted (container has access to Docker Desktop)"
     fi
 
     # Mount cache directories for package managers
@@ -471,16 +491,17 @@ Usage:
     agentbox [OPTIONS] [COMMAND]
 
 Options:
-    -h, --help              Show this help message
-    --tool TOOL             Choose tool: claude (default) or opencode
-    -p PORT                 Forward a port from host to container (can be used multiple times)
-    --rebuild               Force rebuild of the image
-    --add-dir DIR           Mount additional directory (can be used multiple times)
-    --ignore-dot-env        Do not load .env files as environment variables (still mounted)
+    -h, --help                  Show this help message
+    --tool TOOL                 Choose tool: claude (default) or opencode
+    -p PORT                     Forward a port from host to container (can be used multiple times)
+    --rebuild                   Force rebuild of the image
+    --add-dir DIR               Mount additional directory (can be used multiple times)
+    --ignore-dot-env            Do not load .env files as environment variables (still mounted)
+    --dangerously-mount-docker  Mount Docker socket (requires Docker Desktop)
 
 Commands:
-    shell [--admin]         Start interactive shell instead of Claude CLI
-    ssh-init                Initialize SSH directory for AgentBox
+    shell [--admin]             Start interactive shell instead of Claude CLI
+    ssh-init                    Initialize SSH directory for AgentBox
 
     If no command is provided, Claude CLI will be started automatically.
     Use 'shell' command to get a shell instead of Claude CLI.
@@ -488,17 +509,17 @@ Commands:
     Other commands will be executed inside the container.
 
 Examples:
-    agentbox                            # Start Claude CLI for current project
-    agentbox --tool opencode            # Start OpenCode instead of Claude
-    agentbox -p 3002                    # Forward port 3002
-    agentbox -p 3002:8080               # Map host port 3002 to container port 8080
-    agentbox shell                      # Start interactive shell instead of Claude
-    agentbox shell --admin              # Start admin shell with sudo access
+    agentbox                              # Start Claude CLI for current project
+    agentbox --tool opencode              # Start OpenCode instead of Claude
+    agentbox -p 3002                      # Forward port 3002
+    agentbox -p 3002:8080                 # Map host port 3002 to container port 8080
+    agentbox shell                        # Start interactive shell instead of Claude
+    agentbox shell --admin                # Start admin shell with sudo access
     agentbox --add-dir ~/1 --add-dir ~/2  # Add dirs with Claude CLI
-    agentbox python script.py           # Run Python script in container
-    agentbox --rebuild                  # Force rebuild image
-    agentbox ssh-init                   # Set up SSH for AgentBox
-    AGENTBOX_TOOL=opencode agentbox     # Use env var to select tool
+    agentbox python script.py             # Run Python script in container
+    agentbox --rebuild                    # Force rebuild image
+    agentbox ssh-init                     # Set up SSH for AgentBox
+    AGENTBOX_TOOL=opencode agentbox       # Use env var to select tool
 
 Environment variables (set in ~/.agentbox/.env):
     AGENTBOX_EXTRA_HOSTS    Comma-separated host:ip pairs added to container /etc/hosts
@@ -555,6 +576,7 @@ main() {
     local force_rebuild=false
     local shell_mode=false
     local admin_mode=false
+    local docker_mount=false
     local cmd_args=()
     declare -a ports=()
     local extra_dirs=()
@@ -569,6 +591,10 @@ main() {
                 ;;
             --rebuild)
                 force_rebuild=true
+                shift
+                ;;
+            --dangerously-mount-docker)
+                docker_mount=true
                 shift
                 ;;
             -p)
@@ -671,12 +697,12 @@ main() {
     # Run or attach to container
     if [[ "$shell_mode" == "true" ]]; then
         if [[ "$admin_mode" == "true" ]]; then
-            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "shell" "--admin" "${cmd_args[@]}"
+            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "shell" "--admin" "${cmd_args[@]}"
         else
-            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "shell" "${cmd_args[@]}"
+            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "shell" "${cmd_args[@]}"
         fi
     else
-        run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "${cmd_args[@]}"
+        run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "${cmd_args[@]}"
     fi
 }
 

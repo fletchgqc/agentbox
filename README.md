@@ -63,6 +63,23 @@ Start your coding agent in the agentbox directory and issue this (example) promp
 
 Then you can go to your project directory and run (e.g.) `agentbox --tool copilot`. Thanks to [Felix Medam](https://github.com/SputnikTea) for this very cool idea.
 
+## Docker Access
+
+When Docker Desktop is used, AgentBox can optionally mount its socket, allowing you to run Docker commands inside the container:
+
+```bash
+agentbox --dangerously-mount-docker
+```
+
+> [!CAUTION]
+> The mounted socket gives the agent access to the Docker daemon. It can spawn sibling containers that mount host directories beyond your project — the scope depends on your Docker Desktop file sharing settings. Only use this flag if you understand the implications.
+
+> [!NOTE]
+> Native Linux Docker is blocked because mounting its socket grants equivalent-to-root host access, bypassing container isolation.
+
+> [!NOTE]
+> The `--dangerously-mount-docker` flag is not supported with Podman.
+
 ## Helpful Commands
 
 ```bash
@@ -85,6 +102,9 @@ agentbox -c
 # Mount additional directories for multi-project access
 agentbox --add-dir ~/proj1 --add-dir ~/proj2
 
+# Enable Docker commands inside container
+agentbox --dangerously-mount-docker
+
 # Start shell with sudo privileges
 agentbox shell --admin
 
@@ -92,7 +112,8 @@ agentbox shell --admin
 agentbox ssh-init
 ```
 
-**Note**: Tool selection via `--tool` flag takes precedence over the `AGENTBOX_TOOL` environment variable.
+> [!NOTE] 
+> Tool selection via `--tool` flag takes precedence over the `AGENTBOX_TOOL` environment variable.
 
 ## How It Works
 
