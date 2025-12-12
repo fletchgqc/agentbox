@@ -47,6 +47,23 @@ Start your coding agent in the agentbox directory and issue this (example) promp
 
 Then you can go to your project directory and run (e.g.) `agentbox --tool copilot`. Thanks to [Felix Medam](https://github.com/SputnikTea) for this very cool idea.
 
+## Docker Access
+
+AgentBox can optionally mount the host's Docker socket, allowing you to run Docker commands inside the container:
+
+```bash
+agentbox --docker
+```
+
+This mounts `/var/run/docker.sock` (or Docker Desktop's socket on macOS) and handles group permissions automatically. Useful for projects that need to build/run Docker images.
+
+**How it works:**
+- Your current directory is always mounted as `/workspace`
+- Additional directories are mounted using their folder names (e.g., `/foo`, `/bar`)
+- All directories are writable - changes sync back to the host
+- The mounting order follows the order you specify in the flag
+
+
 ## Helpful Commands
 
 ```bash
@@ -68,6 +85,9 @@ agentbox -c
 
 # Mount additional directories for multi-project access
 agentbox --add-dir ~/proj1 --add-dir ~/proj2
+
+# Enable Docker commands inside container
+agentbox --docker
 
 # Start shell with sudo privileges
 agentbox shell --admin

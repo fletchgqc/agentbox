@@ -65,6 +65,18 @@ RUN ARCH=$(dpkg --print-architecture) && \
     rm /tmp/glab.deb && \
     glab --version
 
+# Install Docker CLI from official repository (for Docker socket mounting)
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg | \
+    gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
+    chmod 644 /usr/share/keyrings/docker-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian \
+    $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && \
+    apt-get install -y docker-ce-cli && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    docker --version
+
 # Create non-root user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
@@ -72,6 +84,8 @@ ARG USERNAME=agent
 
 RUN groupadd -g ${GROUP_ID} ${USERNAME} || true && \
     useradd -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/zsh ${USERNAME} && \
+    (getent group docker || groupadd docker) && \
+    usermod -aG docker,0 ${USERNAME} && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
     chmod 0440 /etc/sudoers.d/${USERNAME}
 
