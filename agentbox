@@ -315,13 +315,20 @@ run_container() {
         docker volume create "$claude_volume_name" &>/dev/null
 
         # Initialize volume with global Claude config if it exists
+        # Run as root to ensure correct ownership regardless of host file permissions
         if [[ -d "${HOME}/.claude" ]]; then
-            # Use a temporary container to copy data to the volume
             docker run --rm \
                 -v "${HOME}/.claude:/source:ro" \
                 -v "${claude_volume_name}:/dest" \
+                --user root \
                 "$IMAGE_NAME" \
-                sh -c "cp -r /source/* /dest/ 2>/dev/null || true"
+                sh -c "cp -r /source/* /dest/ 2>/dev/null; chown -R claude:claude /dest"
+        else
+            docker run --rm \
+                -v "${claude_volume_name}:/dest" \
+                --user root \
+                "$IMAGE_NAME" \
+                chown -R claude:claude /dest
         fi
     fi
 
