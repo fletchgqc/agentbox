@@ -316,19 +316,23 @@ run_container() {
 
         # Initialize volume with global Claude config if it exists
         # Run as root to ensure correct ownership regardless of host file permissions
+        # Use numeric IDs - must match what was used to build the image
+        local uid=$(id -u)
+        local gid=$(id -g)
+
         if [[ -d "${HOME}/.claude" ]]; then
             docker run --rm \
                 -v "${HOME}/.claude:/source:ro" \
                 -v "${claude_volume_name}:/dest" \
                 --user root \
                 "$IMAGE_NAME" \
-                sh -c "cp -r /source/* /dest/ 2>/dev/null; chown -R claude:claude /dest"
+                sh -c "cp -r /source/* /dest/ 2>/dev/null; chown -R ${uid}:${gid} /dest"
         else
             docker run --rm \
                 -v "${claude_volume_name}:/dest" \
                 --user root \
                 "$IMAGE_NAME" \
-                chown -R claude:claude /dest
+                chown -R ${uid}:${gid} /dest
         fi
     fi
 
