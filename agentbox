@@ -316,7 +316,6 @@ run_container() {
 
         # Initialize volume with global Claude config if it exists
         # Run as root to ensure correct ownership regardless of host file permissions
-        # Use numeric IDs - must match what was used to build the image
         local uid=$(id -u)
         local gid=$(id -g)
 
