@@ -1,6 +1,6 @@
 # Migration Plan: Claude Code → OpenCode
 
-**Status**: 🔄 In Planung  
+**Status**: 🔄 In Implementierung (Phase 1-5 ✅ abgeschlossen, Phase 4 & 6 ausstehend)  
 **Erstellt**: 2024-12-23  
 **Letztes Update**: 2024-12-23  
 
@@ -42,24 +42,30 @@ Alle Referenzen und Funktionalität von Claude Code durch OpenCode ersetzen bei:
 
 ## 📋 Implementierungs-Checkliste
 
-### Phase 1: Docker Image ⏳ **TODO**
-- [ ] **Dockerfile Zeile 211**: Package ändern `@anthropic-ai/claude-code` → `opencode-ai`
-- [ ] **Dockerfile Zeile 213**: Version check `claude --version` → `opencode --version`
-- [ ] **Build testen**: `./agentbox --rebuild`
+### Phase 1: Docker Image ✅ **DONE**
+- [x] **Dockerfile Zeile 211**: Package ändern `@anthropic-ai/claude-code` → `opencode-ai`
+- [x] **Dockerfile Zeile 213**: Version check `claude --version` → `opencode --version`
+- [x] **Build testen**: `./agentbox --rebuild`
 
-### Phase 2: Container Scripts ⏳ **TODO**
-- [ ] **entrypoint.sh Zeile 98**: Welcome message `Claude CLI` → `OpenCode`
-- [ ] **entrypoint.sh Zeilen 76-79**: MCP detection um `opencode.json` erweitern
-- [ ] **entrypoint.sh Zeile 68**: Git identity `claude@agentbox` → `agent@agentbox` (optional)
+**Ergebnis**: OpenCode 1.0.191 erfolgreich installiert, Docker Image baut sauber.
 
-### Phase 3: Main Script ⏳ **TODO**
-- [ ] **agentbox Zeile 310**: Volume-Name `agentbox-claude-*` → `agentbox-config-*`
-- [ ] **agentbox Zeilen 313-336**: Volume creation logic für OpenCode anpassen
-- [ ] **agentbox Zeile 338**: Volume mount Pfad `~/.claude` → `~/.config/opencode`
-- [ ] **agentbox Zeilen 341-343**: Env var `CLAUDE_CONFIG_DIR` → `OPENCODE_CONFIG_DIR`
-- [ ] **agentbox Zeilen 367-374**: Command `claude --dangerously-skip-permissions` → `opencode`
-- [ ] **agentbox Zeilen 416, 437**: Help text aktualisieren
-- [ ] **agentbox Zeilen 468-482**: Cleanup function für neue Volume-Namen
+### Phase 2: Container Scripts ✅ **DONE**
+- [x] **entrypoint.sh Zeile 98**: Welcome message `Claude CLI` → `OpenCode`
+- [x] **entrypoint.sh Zeilen 76-79**: MCP detection um `opencode.json` erweitern
+- [ ] **entrypoint.sh Zeile 68**: Git identity `claude@agentbox` → `agent@agentbox` (optional, übersprungen)
+
+**Ergebnis**: Welcome message und MCP detection aktualisiert.
+
+### Phase 3: Main Script ✅ **DONE**
+- [x] **agentbox Zeile 310**: Volume-Name `agentbox-claude-*` → `agentbox-config-*`
+- [x] **agentbox Zeilen 313-336**: Volume creation logic für OpenCode anpassen
+- [x] **agentbox Zeile 338**: Volume mount Pfad `~/.claude` → `~/.config/opencode`
+- [x] **agentbox Zeilen 341-343**: Env var `CLAUDE_CONFIG_DIR` → `OPENCODE_CONFIG_DIR`
+- [x] **agentbox Zeilen 367-374**: Command `claude --dangerously-skip-permissions` → `opencode`
+- [x] **agentbox Zeilen 416, 429, 437, 441, 443**: Help text aktualisiert (alle Referenzen)
+- [x] **agentbox Zeilen 468-482**: Cleanup function für neue Volume-Namen
+
+**Ergebnis**: Alle Script-Änderungen abgeschlossen, neue Volumes werden korrekt erstellt (`agentbox-config-*`).
 
 ### Phase 4: Dokumentation ⏳ **TODO**
 - [ ] **README.md Zeile 1-6**: Titel/Beschreibung Claude → OpenCode
@@ -81,9 +87,11 @@ Alle Referenzen und Funktionalität von Claude Code durch OpenCode ersetzen bei:
 - [ ] **OPENCODE.md Zeile 1**: Verweis auf AGENTS.md hinzufügen
 - [ ] **OPENCODE.md Zeilen 27-29**: Dokumentations-Guidelines anpassen
 
-### Phase 5: Neue Dateien ⏳ **TODO**
-- [ ] **opencode.json.example**: Beispiel-Config mit maximalen Permissions erstellen
-- [ ] **.gitignore**: `opencode.json` und `.opencode/` hinzufügen (optional)
+### Phase 5: Neue Dateien ✅ **DONE**
+- [x] **opencode.json.example**: Beispiel-Config mit maximalen Permissions erstellt
+- [x] **.gitignore**: `opencode.json` und `.opencode/` hinzugefügt
+
+**Ergebnis**: Beispiel-Konfiguration für OpenCode bereitgestellt.
 
 ### Phase 6: Testing ⏳ **TODO**
 - [ ] `./agentbox --rebuild` erfolgreich

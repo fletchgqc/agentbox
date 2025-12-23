@@ -306,41 +306,41 @@ run_container() {
         --env "HISTFILE=/home/claude/.shell_history/zsh_history"
     )
 
-    # Use Docker named volume for Claude config (like Anthropic's devcontainer)
-    local claude_volume_name="agentbox-claude-${container_name#agentbox-}"
+    # Use Docker named volume for OpenCode config
+    local config_volume_name="agentbox-config-${container_name#agentbox-}"
 
     # Check if volume exists and initialize if needed
-    if ! docker volume inspect "$claude_volume_name" &>/dev/null; then
-        log_info "Creating Claude CLI volume and copying authentication from global config"
-        docker volume create "$claude_volume_name" &>/dev/null
+    if ! docker volume inspect "$config_volume_name" &>/dev/null; then
+        log_info "Creating OpenCode config volume"
+        docker volume create "$config_volume_name" &>/dev/null
 
-        # Initialize volume with global Claude config if it exists
+        # Initialize volume with global OpenCode config if it exists
         # Run as root to ensure correct ownership regardless of host file permissions
         local uid=$(id -u)
         local gid=$(id -g)
 
-        if [[ -d "${HOME}/.claude" ]]; then
+        if [[ -d "${HOME}/.config/opencode" ]]; then
             docker run --rm \
-                -v "${HOME}/.claude:/source:ro" \
-                -v "${claude_volume_name}:/dest" \
+                -v "${HOME}/.config/opencode:/source:ro" \
+                -v "${config_volume_name}:/dest" \
                 --user root \
                 "$IMAGE_NAME" \
-                sh -c "cp -r /source/* /dest/ 2>/dev/null; chown -R ${uid}:${gid} /dest"
+                sh -c "cp -r /source/* /dest/ 2>/dev/null || true; chown -R ${uid}:${gid} /dest"
         else
             docker run --rm \
-                -v "${claude_volume_name}:/dest" \
+                -v "${config_volume_name}:/dest" \
                 --user root \
                 "$IMAGE_NAME" \
                 chown -R ${uid}:${gid} /dest
         fi
     fi
 
-    mount_opts+=(-v "${claude_volume_name}:/home/claude/.claude")
+    mount_opts+=(-v "${config_volume_name}:/home/claude/.config/opencode")
 
-    # Set Claude config directory environment variable
-    mount_opts+=(--env "CLAUDE_CONFIG_DIR=/home/claude/.claude")
+    # Set OpenCode config directory environment variable
+    mount_opts+=(--env "OPENCODE_CONFIG_DIR=/home/claude/.config/opencode")
 
-    log_info "Claude CLI configuration mounted"
+    log_info "OpenCode configuration mounted"
 
     # Mount project directory path info for direnv approval translation
     if [[ -f "$PROJECT_DIR/.envrc" ]]; then
@@ -364,13 +364,13 @@ run_container() {
             container_cmd=("${cmd_args[@]:-/bin/zsh}")
         fi
     else
-        # Run claude through zsh to get proper environment
-        # Always include --dangerously-skip-permissions, append any additional flags
-        local claude_cmd="claude --dangerously-skip-permissions"
+        # Run opencode through zsh to get proper environment
+        # OpenCode allows all operations by default (no skip-permissions flag needed)
+        local opencode_cmd="opencode"
         if [[ ${#cmd_args[@]} -gt 0 ]]; then
-            claude_cmd="$claude_cmd ${cmd_args[*]}"
+            opencode_cmd="$opencode_cmd ${cmd_args[*]}"
         fi
-        container_cmd=(zsh -c "source ~/.zshrc && exec $claude_cmd")
+        container_cmd=(zsh -c "source ~/.zshrc && exec $opencode_cmd")
     fi
 
     # Check for .env file in project directory and add to docker args
@@ -413,7 +413,7 @@ run_container() {
 # Show help
 show_help() {
     cat << EOF
-AgentBox - Simplified Docker environment for Claude development
+AgentBox - Simplified Docker environment for OpenCode/AI development
 
 Usage:
     agentbox [OPTIONS] [COMMAND]
@@ -426,21 +426,21 @@ Options:
     --add-dir DIR           Mount additional directory (can be used multiple times)
 
 Commands:
-    shell [--admin]         Start interactive shell instead of Claude CLI
+    shell [--admin]         Start interactive shell instead of OpenCode
     ssh-init                Initialize SSH directory for AgentBox
 
-    If no command is provided, Claude CLI will be started automatically.
-    Use 'shell' command to get a shell instead of Claude CLI.
+    If no command is provided, OpenCode will be started automatically.
+    Use 'shell' command to get a shell instead of OpenCode.
     Use 'shell --admin' to get a shell with sudo privileges.
     Other commands will be executed inside the container.
 
 Examples:
-    agentbox                            # Start Claude CLI for current project
+    agentbox                            # Start OpenCode for current project
     agentbox -p 3002                    # Forward port 3002
     agentbox -p 3002:8080               # Map host port 3002 to container port 8080
-    agentbox shell                      # Start interactive shell instead of Claude
+    agentbox shell                      # Start interactive shell instead of OpenCode
     agentbox shell --admin              # Start admin shell with sudo access
-    agentbox --add-dir ~/1 --add-dir ~/2  # Add dirs with Claude CLI
+    agentbox --add-dir ~/1 --add-dir ~/2  # Add dirs with OpenCode
     agentbox python script.py           # Run Python script in container
     agentbox --cleanup                  # Remove image and optionally cached data
     agentbox --rebuild                  # Force rebuild image
@@ -463,6 +463,10 @@ cleanup_all() {
         log_info "Removing AgentBox image"
         docker rmi "$IMAGE_NAME" &> /dev/null || true
     fi
+
+    # Remove Docker volumes
+    log_info "Removing AgentBox config volumes..."
+    docker volume ls -q | grep "agentbox-config" | xargs -r docker volume rm 2>/dev/null || true
 
     # Remove cached data (optional - ask user)
     local cache_base="${HOME}/.cache/agentbox"

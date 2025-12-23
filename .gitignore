@@ -27,3 +27,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# OpenCode config (user-specific)
+opencode.json
+.opencode/

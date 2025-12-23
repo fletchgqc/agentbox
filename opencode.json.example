@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/opencode.schema.json",
+  
+  "permission": {
+    "edit": "allow",
+    "bash": "allow",
+    "webfetch": "allow",
+    "doom_loop": "ask",
+    "external_directory": "ask"
+  },
+  
+  "mcp": {
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem"],
+      "environment": {
+        "ALLOWED_PATHS": "/workspace"
+      },
+      "enabled": false
+    }
+  },
+  
+  "_comment": "AgentBox OpenCode configuration - maximale Freiheit für AI Agent. Copy to opencode.json and customize as needed."
+}

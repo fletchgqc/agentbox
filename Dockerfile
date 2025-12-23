@@ -202,15 +202,15 @@ WORKDIR /workspace
 # Set the user for runtime
 USER ${USERNAME}
 
-# Install Claude as last step
+# Install OpenCode as last step
 # Changing the ARG (via --build-arg) will invalidate the cache for the
-# following steps and consequently install the latest Claude version
+# following steps and consequently install the latest OpenCode version
 ARG BUILD_TIMESTAMP=unknown
 RUN bash -c "source $NVM_DIR/nvm.sh && \
     npm install -g \
-        @anthropic-ai/claude-code && \
-    # Verify Claude CLI installation
-    which claude && claude --version"
+        opencode-ai && \
+    # Verify OpenCode installation
+    which opencode && opencode --version"
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

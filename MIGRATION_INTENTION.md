@@ -12,16 +12,6 @@
 ### Ausgangssituation
 AgentBox ist ein vereinfachtes Docker-Environment für AI-Coding-Agents. Es wurde ursprünglich für **Claude Code** (Anthropic's proprietärer CLI) entwickelt, um sichere Container-Isolation zu ermöglichen.
 
-### Motivation für OpenCode
-
-**OpenCode** ist ein Open-Source AI-Coding-Agent mit folgenden Vorteilen:
-
-1. **Open Source**: 41K+ GitHub Stars, vollständig transparent
-2. **Multi-Provider**: Unterstützt 75+ LLM-Provider (Anthropic, OpenAI, Google, lokale Modelle)
-3. **Flexibilität**: TUI, Desktop App, IDE Extensions
-4. **Community**: Aktive Entwicklung, keine Vendor-Lock-in
-5. **Gleiche Philosophie**: Container-Isolation für sichere Agent-Operationen
-
 ### Projektziele bleiben gleich
 - ✅ Container-Isolation für AI-Agents
 - ✅ Sichere "YOLO-Mode" Nutzung ohne Risiko

@@ -74,8 +74,9 @@ EOF
 fi
 
 # Check if project has MCP servers and show reminder
-if [ -f "/workspace/.mcp.json" ] || [ -f "/workspace/mcp.json" ]; then
-    echo "🔌 MCP configuration detected. To enable MCP servers, see AgentBox documentation."
+if [ -f "/workspace/.mcp.json" ] || [ -f "/workspace/mcp.json" ] || \
+   [ -f "/workspace/opencode.json" ] || grep -q '"mcp"' /workspace/opencode.json 2>/dev/null; then
+    echo "🔌 MCP configuration detected in opencode.json"
 fi
 
 # Set terminal for better experience
@@ -95,7 +96,7 @@ if [ -t 0 ] && [ -t 1 ]; then
     echo "🐍 Python: $(python3 --version 2>&1 | cut -d' ' -f2) (uv available)"
     echo "🟢 Node.js: $(node --version 2>/dev/null || echo 'not found')"
     echo "☕ Java: $(java -version 2>&1 | head -1 | cut -d'"' -f2 || echo 'not found')"
-    echo "🤖 Claude CLI: $(claude --version 2>/dev/null || echo 'not found - check installation')"
+    echo "🤖 OpenCode: $(opencode --version 2>/dev/null || echo 'not found - check installation')"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 fi
