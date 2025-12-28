@@ -13,15 +13,17 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 
 ### Architecture Decisions
 
-1. **Ephemeral Containers**: Containers use `--rm` flag and are destroyed on exit. This differs from ClaudeBox's persistent slot-based containers.
+1. **Hook-based Agent Architecture**: Each agent provides 2 hooks (install.sh, start.sh) + 1 metadata file (config) instead of configuration variables. This minimizes coupling and makes adding new agents trivial.
 
-2. **Hash-Based Naming**: Container names use SHA256 hash of project directory path (first 12 chars) to ensure uniqueness and avoid conflicts.
+2. **Ephemeral Containers**: Containers use `--rm` flag and are destroyed on exit. This differs from ClaudeBox's persistent slot-based containers.
 
-3. **Volume Strategy**: Claude CLI config uses Docker named volumes (not bind mounts) to avoid permission issues. Initialized from `~/.claude` if it exists.
+3. **Hash-Based Naming**: Container names use SHA256 hash of project directory path (first 12 chars) to ensure uniqueness and avoid conflicts.
 
-4. **SSH Implementation**: Currently mounts `~/.agentbox/ssh/` directory directly (not true SSH agent forwarding). Future improvement could use Docker's `--ssh` flag for better security.
+4. **Volume Strategy**: Agent config uses Docker named volumes (not bind mounts) to avoid permission issues. Initialized from host config if it exists (e.g., `~/.config/opencode`).
 
-5. **UID/GID Handling**: Dockerfile builds with host user's UID/GID passed as build args to minimize permission issues, but some remain (see ZSH history issue).
+5. **SSH Implementation**: Currently mounts `~/.agentbox/ssh/` directory directly (not true SSH agent forwarding). Future improvement could use Docker's `--ssh` flag for better security.
+
+6. **UID/GID Handling**: Dockerfile builds with host user's UID/GID passed as build args to minimize permission issues, but some remain (see ZSH history issue).
 
 ## Implementation Details
 
@@ -53,8 +55,18 @@ After each successful rebuild, `docker image prune -f --filter "label=agentbox.v
 /home/claude/.m2        # Maven cache
 /home/claude/.gradle    # Gradle cache
 /home/claude/.shell_history  # History directory (HISTFILE env var points to zsh_history inside)
-/home/claude/.claude    # Claude config (Docker volume)
+/home/claude/.config/<agent> # Agent config (Docker volume, path defined by agent's config metadata)
 ```
+
+## Hook-based Agent Architecture
+
+AgentBox uses a hook-based architecture for agent integration.
+
+**Full documentation**: [`HOOK_ARCHITECTURE.md`](HOOK_ARCHITECTURE.md)
+
+**Quick summary**: Each agent provides 2 hooks (`install.sh`, `start.sh`) + 1 metadata file (`config`). This minimizes coupling and makes adding new agents trivial.
+
+**Adding a new agent**: See [`agents.d/README.md`](agents.d/README.md)
 
 ## Testing Status
 - Basic functionality verified (help command, shell mode)
@@ -114,7 +126,7 @@ The `agentbox` script has these key functions:
 
 2. **Path Hashing**: Container names use first 12 chars of SHA256(project_path) - collision risk is negligible
 
-3. **Volume Naming**: `agentbox-claude-<hash>` pattern ensures per-project isolation
+3. **Volume Naming**: `agentbox-config-<hash>` pattern ensures per-project isolation
 
 4. **Shell Mode**: When using `shell` command, execution goes through zsh even for bash (ensures environment is loaded)
 

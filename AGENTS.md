@@ -29,7 +29,30 @@
 - Document agentbox-specific knowledge, not standard tools/syntax
 - Inform rather than promote - weigh every addition against making docs too long
 
+## Agent Selection
+
+AgentBox supports multiple CLI agents via a hook-based architecture.
+See [`HOOK_ARCHITECTURE.md`](HOOK_ARCHITECTURE.md) for full details.
+
+### Available Agents
+
+- **opencode** - Open-source AI agent (75+ LLM providers)
+- **claude-code** - Anthropic's Claude Code (planned)
+
+### Select Agent
+
+```bash
+./agentbox --agent=opencode           # Specific agent
+./agentbox --rebuild --agent=opencode # Rebuild with agent
+./agentbox                            # Default (claude-code, fallback: opencode)
+```
+
+### Add New Agent
+
+See [`agents.d/README.md`](agents.d/README.md) for step-by-step guide.
+
 ## Architecture Notes
+- **Hook-based agents**: 2 hooks + 1 metadata file per agent
 - **Ephemeral containers**: `--rm` flag, destroyed on exit
 - **Hash-based naming**: Container names use SHA256(project_path)[0:12]
 - **No prompts**: Everything automatic (except initial SSH setup)

@@ -2,18 +2,32 @@
 
 # AgentBox
 
-A Docker-based development environment for running Claude CLI in a more safe, isolated fashion. This makes it less dangerous to use YOLO mode (`--dangerously-skip-permissions`), which is, in my opinion, the only way to use AI agents.
+A Docker-based development environment for running AI coding agents in a safe, isolated fashion. Supports multiple agents (OpenCode, Claude Code, etc.) via a simple hook-based architecture.
 
 ## Features
 
-- **Shares project directory with host**: Maps a volume with the source code so that you can see and modify the agent's changes on the host machine - just like if you were running Claude without a container.
+- **Multi-Agent Support**: Easily switch between OpenCode, Claude Code, and other AI coding agents
+- **Hook-based Architecture**: Add new agents without modifying core code
+- **Shares project directory with host**: Maps a volume with the source code so that you can see and modify the agent's changes on the host machine
 - **Multi-Directory Support**: Mount additional project directories for cross-project development
 - **Unified Development Environment**: Single Docker image with Python, Node.js, Java, and Shell support
 - **Automatic Rebuilds**: Detects changes to Dockerfile/entrypoint and rebuilds automatically
 - **Per-Project Isolation**: Each project directory gets its own isolated container environment
 - **Persistent Data**: Package caches and shell history persist between sessions
-- **Claude CLI Integration**: Built-in support for Claude CLI with per-project authentication
 - **SSH Support**: Dedicated SSH directory for secure Git operations
+
+## Agent Architecture
+
+AgentBox uses a **hook-based architecture** for maximum flexibility. Each agent provides 2 hooks + 1 metadata file, enabling new agents to be added without core code changes.
+
+See [`HOOK_ARCHITECTURE.md`](HOOK_ARCHITECTURE.md) for details.
+
+## Supported Agents
+
+- **OpenCode** - Open-source AI coding agent with 75+ LLM providers
+- **Claude Code** - Anthropic's Claude Code (planned)
+
+See [`agents.d/README.md`](agents.d/README.md) for how to add new agents.
 
 ## Requirements
 
@@ -54,15 +68,17 @@ agentbox --add-dir ~/library-code shell
 # Show available commands
 agentbox --help
 
-# Start Claude CLI in container (--dangerously-skip-permissions is automatically included)
-agentbox
+# Build with specific agent (default: claude-code, fallback: opencode)
+./agentbox --rebuild --agent=opencode
 
-# Non-agentbox CLI flags are passed through to claude.
-# For example, to continue the most recent session
-agentbox -c
+# Start agent (with specific agent selection)
+./agentbox --agent=opencode
+
+# Or use default agent
+./agentbox
 
 # Mount additional directories for multi-project access
-agentbox --add-dir ~/proj1 --add-dir ~/proj2  # Multiple directories
+agentbox --add-dir ~/proj1 --add-dir ~/proj2
 
 # Start shell with sudo privileges
 agentbox shell --admin
@@ -87,7 +103,7 @@ Single Dockerfile → Build once → agentbox:latest image
 Persistent data (survives container removal):
   Cache: ~/.cache/agentbox/agentbox-<hash>/
   History: ~/.agentbox/projects/agentbox-<hash>/history/
-  Claude: Docker volume agentbox-claude-<hash>
+  Agent Config: Docker volume agentbox-config-<hash>
 ```
 
 ## Languages and Tools
@@ -98,7 +114,7 @@ The unified Docker image includes:
 - **Node.js**: Latest LTS via NVM with npm, yarn, and pnpm
 - **Java**: Latest LTS via SDKMAN with Gradle
 - **Shell**: Zsh (default) and Bash with common utilities
-- **Claude CLI**: Pre-installed with per-project authentication
+- **AI Agents**: OpenCode, Claude Code (planned) - see Agent Selection below
 
 ## Authenticating to Git or other SCC Providers
 
@@ -116,7 +132,7 @@ Note that Claude will convert your git remotes to https, ssh remotes don't work 
 
 ## Git Configuration
 
-AgentBox copies your host `~/.gitconfig` into the container on each startup. If you don't have a host gitconfig, it uses `claude@agentbox` as the default identity.
+AgentBox copies your host `~/.gitconfig` into the container on each startup. If you don't have a host gitconfig, it uses `agent@agentbox` / `AI Agent (AgentBox)` as the default identity.
 
 ## SSH Configuration
 
@@ -139,17 +155,26 @@ AgentBox also includes `direnv` support - if you have a `.envrc` file in your pr
 
 ## MCP Server Configuration
 
-Due to [Claude Code bug #6130](https://github.com/anthropics/claude-code/issues/6130), by default you won't be prompted to enable MCP servers when running `agentbox` directly.
+MCP (Model Context Protocol) support depends on the selected agent:
 
-**Workaround options:**
+### OpenCode
+Configure MCP servers in `opencode.json`:
+```json
+{
+  "mcp": {
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem"],
+      "enabled": true
+    }
+  }
+}
+```
 
-1. **Enable individual MCP servers interactively:**
-   ```bash
-   agentbox shell
-   claude
-   ```
+See `opencode.json.example` for a complete configuration template.
 
-2. **Enable all MCP servers by default** by adding `"enableAllProjectMcpServers": true` to your Claude project or user settings.
+### Claude Code (planned)
+Configuration details will be added when Claude Code agent is implemented.
 
 ## Data Persistence
 
@@ -163,10 +188,10 @@ Package manager caches are stored in `~/.cache/agentbox/<container-name>/`:
 ### Shell History
 Zsh history is preserved in `~/.agentbox/projects/<container-name>/history`
 
-### Claude CLI Authentication
-Authentication data is stored in Docker named volumes (`agentbox-claude-<hash>`), providing:
-- Per-project Claude CLI configuration
-- Persistent authentication across container restarts
+### Agent Configuration
+Agent configuration data is stored in Docker named volumes (`agentbox-config-<hash>`), providing:
+- Per-project agent configuration
+- Persistent configuration across container restarts
 - Isolation between different projects
 
 ## Volume Management
@@ -174,27 +199,27 @@ Authentication data is stored in Docker named volumes (`agentbox-claude-<hash>`)
 ### Listing Volumes
 ```bash
 # List all AgentBox volumes
-docker volume ls | grep agentbox-claude
+docker volume ls | grep agentbox-config
 ```
 
 ### Cleanup
 ```bash
-# Remove specific project's authentication
-docker volume rm agentbox-claude-<hash>
+# Remove specific project's configuration
+docker volume rm agentbox-config-<hash>
 
-# Remove all AgentBox volumes (clears all authentication)
-docker volume ls -q | grep agentbox-claude | xargs docker volume rm
+# Remove all AgentBox volumes (clears all configurations)
+docker volume ls -q | grep agentbox-config | xargs docker volume rm
 
 # Full cleanup (removes image and optionally cached data)
 agentbox --cleanup
 ```
 
-**Note**: Removing volumes only affects authentication - your project files remain untouched.
+**Note**: Removing volumes only affects agent configuration - your project files remain untouched.
 
 ## Advanced Usage
 
 ### Running One-Off Commands
-If you need to run a single command in the containerized environment without starting Claude CLI or an interactive shell:
+If you need to run a single command in the containerized environment without starting the agent or an interactive shell:
 
 ```bash
 # Run any command
