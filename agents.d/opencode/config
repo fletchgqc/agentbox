@@ -1,0 +1,10 @@
+# OpenCode Configuration Metadata
+
+# Docker Volume Name
+VOLUME_NAME="agentbox-config-${HASH}"
+
+# Mount-Pfad im Container
+MOUNT_PATH="/home/claude/.config/opencode"
+
+# Config-Verzeichnis auf Host (für Volume-Initialisierung)
+HOST_CONFIG_DIR="${HOME}/.config/opencode"

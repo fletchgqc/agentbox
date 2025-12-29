@@ -1,0 +1,19 @@
+# Agent Configuration Metadata
+#
+# Zweck: Definiert Volume- und Config-Pfade für AgentBox
+# Aufgerufen: In agentbox script vor docker run (via source)
+# Format: Key-Value Paare (Bash-kompatibel)
+#
+# WICHTIG: Alle Variablen sind VERPFLICHTEND!
+# AgentBox ersetzt automatisch Platzhalter:
+#   ${HASH} - Container-Hash (z.B. "abc123")
+#   ${AGENT} - Agent-Name (z.B. "opencode")
+
+# Docker Volume Name (wird automatisch erstellt)
+VOLUME_NAME="agentbox-config-${HASH}"
+
+# Mount-Pfad im Container (wo der Agent seine Config erwartet)
+MOUNT_PATH="/home/claude/.config/your-agent"
+
+# Config-Verzeichnis auf Host (für Volume-Initialisierung, optional leer lassen)
+HOST_CONFIG_DIR="${HOME}/.config/your-agent"

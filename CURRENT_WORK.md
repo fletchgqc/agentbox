@@ -1,16 +1,17 @@
 # Current Work: Hook-based Architecture Implementation
 
-**Status**: Ready for Implementation  
+**Status**: Phase 1 Complete - Ready for Phase 2  
 **Updated**: 2025-12-29
 
 ---
 
 ## Quick Start (Neue Session)
 
-1. **Lies den Implementierungsplan**: [`HOOK_ARCHITECTURE_IMPLEMENTATION_PLAN.md`](HOOK_ARCHITECTURE_IMPLEMENTATION_PLAN.md)
-2. **Beachte die Stolpersteine** (Sektion im Plan!)
-3. **Starte mit Phase 1** (Phase 0 ist abgeschlossen)
-4. **Teste nach jeder Phase**
+1. **Phase 1 ist abgeschlossen** - Dokumentation & Templates erstellt
+2. **Starte mit Phase 2** - Dockerfile & agentbox Script Änderungen
+3. **Lies den Implementierungsplan**: [`HOOK_ARCHITECTURE_IMPLEMENTATION_PLAN.md`](HOOK_ARCHITECTURE_IMPLEMENTATION_PLAN.md)
+4. **Beachte die Stolpersteine** (Sektion im Plan!)
+5. **Teste nach jeder Phase**
 
 ---
 
@@ -19,12 +20,13 @@
 | Phase | Beschreibung | Status |
 |-------|--------------|--------|
 | 0 | Dokumentation überarbeiten | ✅ Done |
-| 1 | Verzeichnisstruktur & Templates | ⏳ Next |
-| 2 | OpenCode Agent Implementation | ⏳ Pending |
+| 1 | Verzeichnisstruktur & Templates | ✅ Done |
+| 2 | Dockerfile & agentbox Script | ⏳ Next |
 | 3 | Dockerfile Änderungen | ⏳ Pending |
 | 4 | agentbox Script Änderungen | ⏳ Pending |
 | 5 | entrypoint.sh Änderungen | ⏳ Pending |
 | 6 | Testing & Validation | ⏳ Pending |
+
 
 ---
 
@@ -43,3 +45,4 @@ Der Implementierungsplan enthält eine Sektion "Bekannte Stolpersteine" mit krit
 
 - **Architektur**: [`HOOK_ARCHITECTURE.md`](HOOK_ARCHITECTURE.md)
 - **Implementierungsplan**: [`HOOK_ARCHITECTURE_IMPLEMENTATION_PLAN.md`](HOOK_ARCHITECTURE_IMPLEMENTATION_PLAN.md)
+- **Agents Directory**: [`agents.d/README.md`](agents.d/README.md)

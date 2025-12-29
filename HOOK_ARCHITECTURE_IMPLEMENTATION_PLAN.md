@@ -1,7 +1,8 @@
 # AgentBox Hook-basierte Architektur - Implementierungsplan
 
-**Status**: Phase 0 ✅ Abgeschlossen, Phase 1+ Bereit  
-**Architektur-Dokumentation**: [`HOOK_ARCHITECTURE.md`](HOOK_ARCHITECTURE.md)
+**Status**: Phase 0 ✅ Abgeschlossen, Phase 1 ✅ Abgeschlossen, Phase 2+ Bereit  
+**Architektur-Dokumentation**: [`HOOK_ARCHITECTURE.md`](HOOK_ARCHITECTURE.md)  
+**Last Completed**: Phase 1
 
 ---
 
@@ -43,12 +44,11 @@ agents.d/
 | Phase | Beschreibung | Status |
 |-------|--------------|--------|
 | 0 | Dokumentation | ✅ Done |
-| 1 | Verzeichnisstruktur & Templates | ⏳ Next |
-| 2 | OpenCode Agent Implementation | ⏳ Pending |
-| 3 | Dockerfile Änderungen | ⏳ Pending |
-| 4 | agentbox Script Änderungen | ⏳ Pending |
-| 5 | entrypoint.sh Änderungen | ⏳ Pending |
-| 6 | Testing & Validation | ⏳ Pending |
+| 1 | Verzeichnisstruktur & Templates | ✅ Done (49a9a47) |
+| 2 | Dockerfile Änderungen | ⏳ Next |
+| 3 | agentbox Script Änderungen | ⏳ Pending |
+| 4 | entrypoint.sh Änderungen | ⏳ Pending |
+| 5 | Testing & Validation | ⏳ Pending |
 
 **Wichtig**: Phasen müssen **sequenziell** durchgeführt werden.
 
@@ -1270,7 +1270,14 @@ Siehe [`HOOK_ARCHITECTURE.md`](HOOK_ARCHITECTURE.md#erfolgs-kriterien) für die 
 
 ## Quick Reference für neue Session
 
-1. Phase 0 ist abgeschlossen
-2. Starte mit **Phase 1** (Verzeichnisstruktur & Templates)
-3. Arbeite Phasen **sequenziell** ab
-4. Teste nach jeder Phase
+1. Phase 0 ✅ ist abgeschlossen
+2. Phase 1 ✅ ist abgeschlossen
+3. Starte mit **Phase 2**
+4. Arbeite Phasen **sequenziell** ab
+5. Teste nach jeder Phase
+
+**Aktueller Stand**: 
+- agents.d/ Verzeichnis mit Templates erstellt
+- .template/ und opencode/ Subdirectories vorhanden
+- Alle Dokumentation updated
+- Bereit für Phase 2 
