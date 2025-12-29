@@ -202,15 +202,17 @@ WORKDIR /workspace
 # Set the user for runtime
 USER ${USERNAME}
 
-# Install OpenCode as last step
-# Changing the ARG (via --build-arg) will invalidate the cache for the
-# following steps and consequently install the latest OpenCode version
-ARG BUILD_TIMESTAMP=unknown
-RUN bash -c "source $NVM_DIR/nvm.sh && \
-    npm install -g \
-        opencode-ai && \
-    # Verify OpenCode installation
-    which opencode && opencode --version"
+# Copy all agent implementations
+COPY agents.d/ /opt/agentbox/agents.d/
+
+# Install selected agent
+ARG AGENTBOX_AGENT=claude-code
+ENV AGENTBOX_AGENT=${AGENTBOX_AGENT}
+
+# Install agent (validation happens in agentbox script before build)
+RUN bash -c "set -euxo pipefail; \
+    chmod +x /opt/agentbox/agents.d/\${AGENTBOX_AGENT}/*.sh; \
+    /opt/agentbox/agents.d/\${AGENTBOX_AGENT}/install.sh"
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

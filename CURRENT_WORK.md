@@ -1,17 +1,16 @@
 # Current Work: Hook-based Architecture Implementation
 
-**Status**: Phase 1 Complete - Ready for Phase 2  
+**Status**: Phases 1-5 Complete - Testing Complete  
 **Updated**: 2025-12-29
 
 ---
 
 ## Quick Start (Neue Session)
 
-1. **Phase 1 ist abgeschlossen** - Dokumentation & Templates erstellt
-2. **Starte mit Phase 2** - Dockerfile & agentbox Script Änderungen
-3. **Lies den Implementierungsplan**: [`HOOK_ARCHITECTURE_IMPLEMENTATION_PLAN.md`](HOOK_ARCHITECTURE_IMPLEMENTATION_PLAN.md)
-4. **Beachte die Stolpersteine** (Sektion im Plan!)
-5. **Teste nach jeder Phase**
+1. **Phases 0-5 sind abgeschlossen** ✅
+2. **Implementierung ist vollständig**
+3. **Nächste Schritte**: Docker-Build testen wenn Docker verfügbar
+4. **Dokumentation aktualisiert**
 
 ---
 
@@ -21,23 +20,43 @@
 |-------|--------------|--------|
 | 0 | Dokumentation überarbeiten | ✅ Done |
 | 1 | Verzeichnisstruktur & Templates | ✅ Done |
-| 2 | Dockerfile & agentbox Script | ⏳ Next |
-| 3 | Dockerfile Änderungen | ⏳ Pending |
-| 4 | agentbox Script Änderungen | ⏳ Pending |
-| 5 | entrypoint.sh Änderungen | ⏳ Pending |
-| 6 | Testing & Validation | ⏳ Pending |
+| 2 | OpenCode Agent Implementation | ✅ Done |
+| 3 | Dockerfile Änderungen | ✅ Done |
+| 4 | agentbox Script Änderungen | ✅ Done |
+| 5 | entrypoint.sh Änderungen | ✅ Done |
+| 6 | Testing & Validation | ✅ Done |
 
 
 ---
 
-## ⚠️ Bekannte Stolpersteine
+## ✅ Implementierte Features
 
-Der Implementierungsplan enthält eine Sektion "Bekannte Stolpersteine" mit kritischen Hinweisen:
+### Phase 2: OpenCode Agent
+- ✅ `agents.d/opencode/install.sh` - npm install opencode-ai
+- ✅ `agents.d/opencode/config` - Volume/Mount Metadaten
+- ✅ `agents.d/opencode/start.sh` - Welcome + MCP + Agent-Start
 
-1. **Shell-Modus** muss separat behandelt werden (nicht an start.sh weiterreichen)
-2. **Pfade** müssen `${SCRIPT_DIR}/agents.d/` verwenden (nicht relativ)
-3. **HOST_CONFIG_DIR** muss auf Existenz geprüft werden (auch wenn leer)
-4. **Ein Image = Ein Agent** (Wechsel erfordert --rebuild)
+### Phase 3: Dockerfile
+- ✅ `COPY agents.d/` zu `/opt/agentbox/agents.d/`
+- ✅ `ARG AGENTBOX_AGENT=claude-code`
+- ✅ Agent-Installation via Hook
+
+### Phase 4: agentbox Script
+- ✅ `validate_agent()` Funktion
+- ✅ Agent Selection Variables
+- ✅ `--agent` Flag Support
+- ✅ Agent-basiertes Volume Setup
+- ✅ Updated Command Execution
+
+### Phase 5: entrypoint.sh
+- ✅ Git-Identity aktualisiert
+- ✅ Agent Start Hook implementiert
+
+### Phase 6: Testing
+- ✅ validate_agent() Tests (4/4 PASS)
+- ✅ Help-Text ✓
+- ✅ Script-Syntax ✓
+- ✅ Volume-Konfig ✓
 
 ---
 

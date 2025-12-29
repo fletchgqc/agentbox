@@ -24,6 +24,16 @@ readonly ENTRYPOINT_PATH="${SCRIPT_DIR}/entrypoint.sh"
 readonly IMAGE_NAME="agentbox:latest"
 readonly CONTAINER_PREFIX="agentbox"
 
+# ============================================================================
+# Agent Selection
+# ============================================================================
+
+# Default agent
+DEFAULT_AGENT="claude-code"
+
+# Selected agent (can be overridden by --agent flag)
+AGENT="${DEFAULT_AGENT}"
+
 # Colors for output
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
@@ -38,6 +48,43 @@ log_success() { echo -e "${GREEN}✅${NC} $1"; }
 log_warning() { echo -e "${YELLOW}⚠${NC}  $1"; }
 log_error() { echo -e "${RED}❌${NC} $1" >&2; }
 log_build() { echo -e "${CYAN}🔨${NC} $1"; }
+
+# Validate agent exists and has all required files
+# Returns: validated agent name (or fallback agent)
+# Exit code: 0 on success, 1 on failure
+validate_agent() {
+    local agent="$1"
+    local agents_dir="${SCRIPT_DIR}/agents.d"
+    
+    # Check if agent directory exists
+    if [[ ! -d "${agents_dir}/${agent}" ]]; then
+        # Try fallback to opencode if default agent is not available
+        if [[ "${agent}" == "claude-code" ]] && [[ -d "${agents_dir}/opencode" ]]; then
+            log_warning "Default agent '${agent}' not available, using 'opencode' instead"
+            echo "opencode"
+            return 0
+        fi
+        
+        log_error "Agent '${agent}' not found in agents.d/"
+        log_info "Available agents:"
+        ls -1 "${agents_dir}" | grep -v '^\.' | sed 's/^/  - /' || echo "  (none found)"
+        return 1
+    fi
+    
+    # Validate all required files exist
+    local required_files=("install.sh" "config" "start.sh")
+    for file in "${required_files[@]}"; do
+        if [[ ! -f "${agents_dir}/${agent}/${file}" ]]; then
+            log_error "Agent '${agent}' incomplete: ${file} missing"
+            log_info "Required files: install.sh, config, start.sh"
+            return 1
+        fi
+    done
+    
+    # Agent is valid
+    echo "${agent}"
+    return 0
+}
 
 # Check if Docker is installed and running
 check_docker() {
@@ -71,10 +118,10 @@ get_container_name() {
 
 # Check if image needs rebuild
 needs_rebuild() {
-    # Calculate current Dockerfile and entrypoint hashes
+    # Calculate current Dockerfile and entrypoint hashes (include agent in hash)
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${AGENT}"
 
     # Check if image exists
     if ! docker image inspect "$IMAGE_NAME" &> /dev/null; then
@@ -95,35 +142,32 @@ needs_rebuild() {
 
 # Build Docker image
 build_image() {
+    log_build "Building Docker image with agent: ${AGENT}..."
+    
+    # NO VALIDATION - validate_agent() was already called in main()
+    # Agent is guaranteed to be valid at this point
+    
+    # Calculate hash for rebuild detection (include agent in hash)
     local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
     local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
-
-    log_build "Building AgentBox image (this may take a few minutes on first run)..."
-
-    # Get current user/group IDs
-    local user_id=$(id -u)
-    local group_id=$(id -g)
-
-    # Build with progress output
-    local build_timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    if docker build \
-        --build-arg USER_ID="${user_id}" \
-        --build-arg GROUP_ID="${group_id}" \
-        --build-arg USERNAME="claude" \
-        --build-arg BUILD_TIMESTAMP=${build_timestamp} \
+    local combined_hash="${dockerfile_hash}-${entrypoint_hash}-${AGENT}"
+    
+    if ! docker build \
+        --build-arg AGENTBOX_AGENT="${AGENT}" \
+        --build-arg USER_ID="$(id -u)" \
+        --build-arg GROUP_ID="$(id -g)" \
         --label "agentbox.hash=${combined_hash}" \
         --label "agentbox.version=1.0.0" \
-        --label "agentbox.built=${build_timestamp}" \
+        --label "agentbox.agent=${AGENT}" \
         -t "$IMAGE_NAME" \
-        "$SCRIPT_DIR" ; then
-        log_success "Image built successfully!"
-        docker image prune -f --filter "label=agentbox.version" &>/dev/null || true
-        return 0
-    else
-        log_error "Failed to build image"
+        --progress=plain \
+        "${SCRIPT_DIR}"; then
+        log_error "Docker build failed - agent installation may have failed"
         return 1
     fi
+    
+    log_success "Docker image built successfully with agent: ${AGENT}"
+    docker image prune -f --filter "label=agentbox.version" &>/dev/null || true
 }
 
 expand_tilde() {
@@ -306,41 +350,74 @@ run_container() {
         --env "HISTFILE=/home/claude/.shell_history/zsh_history"
     )
 
-    # Use Docker named volume for OpenCode config
-    local config_volume_name="agentbox-config-${container_name#agentbox-}"
-
-    # Check if volume exists and initialize if needed
-    if ! docker volume inspect "$config_volume_name" &>/dev/null; then
-        log_info "Creating OpenCode config volume"
-        docker volume create "$config_volume_name" &>/dev/null
-
-        # Initialize volume with global OpenCode config if it exists
-        # Run as root to ensure correct ownership regardless of host file permissions
+    # ========================================================================
+    # Agent Configuration Setup (via Metadata)
+    # ========================================================================
+    
+    # NO VALIDATION - Agent was already validated in main() via validate_agent()
+    # Agent is guaranteed to exist and have all required files
+    
+    # Read agent config metadata
+    local agents_dir="${SCRIPT_DIR}/agents.d"
+    local agent_config_file="${agents_dir}/${AGENT}/config"
+    local hash="${container_name#agentbox-}"
+    
+    # Source config file with variable substitution
+    local temp_config=$(mktemp)
+    sed -e "s/\${HASH}/${hash}/g" \
+        -e "s/\${AGENT}/${AGENT}/g" \
+        "${agent_config_file}" > "${temp_config}"
+    
+    source "${temp_config}"
+    rm -f "${temp_config}"
+    
+    # Validate required variables from config are set
+    if [[ -z "${VOLUME_NAME:-}" ]]; then
+        log_error "Agent config did not set VOLUME_NAME"
+        return 1
+    fi
+    if [[ -z "${MOUNT_PATH:-}" ]]; then
+        log_error "Agent config did not set MOUNT_PATH"
+        return 1
+    fi
+    if [[ -z "${HOST_CONFIG_DIR+x}" ]]; then
+        log_error "Agent config did not set HOST_CONFIG_DIR (use empty string if not needed)"
+        return 1
+    fi
+    
+    # Create volume if it doesn't exist
+    if ! docker volume inspect "$VOLUME_NAME" &>/dev/null; then
+        log_info "Creating agent config volume: ${VOLUME_NAME}"
+        docker volume create "$VOLUME_NAME" &>/dev/null
+        
         local uid=$(id -u)
         local gid=$(id -g)
-
-        if [[ -d "${HOME}/.config/opencode" ]]; then
+        
+        # Initialize with global config if it exists and HOST_CONFIG_DIR is set
+        if [[ -n "${HOST_CONFIG_DIR:-}" ]] && [[ -d "${HOST_CONFIG_DIR}" ]]; then
+            log_info "Copying config from ${HOST_CONFIG_DIR}"
             docker run --rm \
-                -v "${HOME}/.config/opencode:/source:ro" \
-                -v "${config_volume_name}:/dest" \
+                -v "${HOST_CONFIG_DIR}:/source:ro" \
+                -v "${VOLUME_NAME}:/dest" \
                 --user root \
                 "$IMAGE_NAME" \
                 sh -c "cp -r /source/* /dest/ 2>/dev/null || true; chown -R ${uid}:${gid} /dest"
         else
             docker run --rm \
-                -v "${config_volume_name}:/dest" \
+                -v "${VOLUME_NAME}:/dest" \
                 --user root \
                 "$IMAGE_NAME" \
                 chown -R ${uid}:${gid} /dest
         fi
     fi
-
-    mount_opts+=(-v "${config_volume_name}:/home/claude/.config/opencode")
-
-    # Set OpenCode config directory environment variable
-    mount_opts+=(--env "OPENCODE_CONFIG_DIR=/home/claude/.config/opencode")
-
-    log_info "OpenCode configuration mounted"
+    
+    # Mount agent config volume
+    mount_opts+=(-v "${VOLUME_NAME}:${MOUNT_PATH}")
+    
+    # Pass agent name to container
+    mount_opts+=(--env "AGENTBOX_AGENT=${AGENT}")
+    
+    log_info "Agent '${AGENT}' configuration mounted"
 
     # Mount project directory path info for direnv approval translation
     if [[ -f "$PROJECT_DIR/.envrc" ]]; then
@@ -358,19 +435,17 @@ run_container() {
     # Prepare the command to run
     local container_cmd
     if [[ "$shell_mode" == "true" ]]; then
+        # Shell mode: bypass agent start.sh, run shell directly
         if [[ "$admin_mode" == "true" ]]; then
             container_cmd=(bash -c "echo '🔒 Admin shell - sudo access enabled' && exec ${cmd_args[*]:-/bin/zsh}")
         else
             container_cmd=("${cmd_args[@]:-/bin/zsh}")
         fi
     else
-        # Run opencode through zsh to get proper environment
-        # OpenCode allows all operations by default (no skip-permissions flag needed)
-        local opencode_cmd="opencode"
-        if [[ ${#cmd_args[@]} -gt 0 ]]; then
-            opencode_cmd="$opencode_cmd ${cmd_args[*]}"
-        fi
-        container_cmd=(zsh -c "source ~/.zshrc && exec $opencode_cmd")
+        # Agent mode: entrypoint.sh will call /opt/agentbox/agents.d/${AGENT}/start.sh
+        # Pass user arguments (e.g., "chat", "--help") to entrypoint
+        # If no args, pass empty - start.sh handles defaults
+        container_cmd=("${cmd_args[@]}")
     fi
 
     # Check for .env file in project directory and add to docker args
@@ -413,7 +488,7 @@ run_container() {
 # Show help
 show_help() {
     cat << EOF
-AgentBox - Simplified Docker environment for OpenCode/AI development
+AgentBox - Simplified Docker environment for AI agent development
 
 Usage:
     agentbox [OPTIONS] [COMMAND]
@@ -424,27 +499,30 @@ Options:
     --cleanup               Remove AgentBox image and cached data
     --rebuild               Force rebuild of the image
     --add-dir DIR           Mount additional directory (can be used multiple times)
+    --agent=<name>          Select agent to use (default: claude-code)
+                              Available: opencode, claude-code (planned)
 
 Commands:
-    shell [--admin]         Start interactive shell instead of OpenCode
+    shell [--admin]         Start interactive shell instead of agent
     ssh-init                Initialize SSH directory for AgentBox
 
-    If no command is provided, OpenCode will be started automatically.
-    Use 'shell' command to get a shell instead of OpenCode.
+    If no command is provided, the agent will be started automatically.
+    Use 'shell' command to get a shell instead of the agent.
     Use 'shell --admin' to get a shell with sudo privileges.
     Other commands will be executed inside the container.
 
 Examples:
-    agentbox                            # Start OpenCode for current project
-    agentbox -p 3002                    # Forward port 3002
-    agentbox -p 3002:8080               # Map host port 3002 to container port 8080
-    agentbox shell                      # Start interactive shell instead of OpenCode
-    agentbox shell --admin              # Start admin shell with sudo access
-    agentbox --add-dir ~/1 --add-dir ~/2  # Add dirs with OpenCode
-    agentbox python script.py           # Run Python script in container
-    agentbox --cleanup                  # Remove image and optionally cached data
-    agentbox --rebuild                  # Force rebuild image
-    agentbox ssh-init                   # Set up SSH for AgentBox
+    agentbox --agent=opencode                # Start OpenCode for current project
+    agentbox                                 # Start default agent (claude-code, fallback: opencode)
+    agentbox -p 3002                         # Forward port 3002
+    agentbox -p 3002:8080                    # Map host port 3002 to container port 8080
+    agentbox shell                           # Start interactive shell instead of agent
+    agentbox shell --admin                   # Start admin shell with sudo access
+    agentbox --add-dir ~/1 --add-dir ~/2    # Add dirs with agent
+    agentbox python script.py                # Run Python script in container
+    agentbox --cleanup                       # Remove image and optionally cached data
+    agentbox --rebuild                       # Force rebuild image
+    agentbox ssh-init                        # Set up SSH for AgentBox
 
 Containers are ephemeral and automatically removed when you exit.
 Package caches and shell history persist between sessions.
@@ -557,16 +635,28 @@ main() {
                 ports+=("$1")
                 shift
                 ;;
-            --add-dir)
-                shift
-                if [[ -z "${1:-}" ]]; then
-                    log_error "--add-dir requires a directory path"
-                    exit 1
-                fi
-                extra_dirs+=("$1")
-                shift
-                ;;
-            shell)
+             --add-dir)
+                 shift
+                 if [[ -z "${1:-}" ]]; then
+                     log_error "--add-dir requires a directory path"
+                     exit 1
+                 fi
+                 extra_dirs+=("$1")
+                 shift
+                 ;;
+             --agent)
+                 if [[ -z "${2:-}" ]]; then
+                     log_error "--agent requires an argument"
+                     exit 1
+                 fi
+                 AGENT="$2"
+                 shift 2
+                 ;;
+             --agent=*)
+                 AGENT="${1#*=}"
+                 shift
+                 ;;
+             shell)
                 shell_mode=true
                 shift
                 # Check if next arg is --admin
@@ -587,12 +677,16 @@ main() {
                 shift
                 ;;
         esac
-    done
+     done
 
-    # Check Docker
-    check_docker
+     # Validate agent early (before docker operations)
+     # This is the ONLY place where agent validation happens
+     AGENT=$(validate_agent "${AGENT}") || exit 1
+     
+     # Check Docker
+     check_docker
 
-    # Handle special commands
+     # Handle special commands
     if [[ "$cleanup_all" == "true" ]]; then
         cleanup_all
         exit 0

@@ -65,18 +65,12 @@ if [ -f "/tmp/host_gitconfig" ]; then
 else
     cat > /home/claude/.gitconfig << 'EOF'
 [user]
-    email = claude@agentbox
-    name = Claude (AgentBox)
+    name = AI Agent (AgentBox)
+    email = agent@agentbox
 [init]
     defaultBranch = main
 EOF
-    echo "ℹ️  Using default git identity (claude@agentbox). Configure ~/.gitconfig on host to customize."
-fi
-
-# Check if project has MCP servers and show reminder
-if [ -f "/workspace/.mcp.json" ] || [ -f "/workspace/mcp.json" ] || \
-   [ -f "/workspace/opencode.json" ] || grep -q '"mcp"' /workspace/opencode.json 2>/dev/null; then
-    echo "🔌 MCP configuration detected in opencode.json"
+    echo "ℹ️  Using default git identity (agent@agentbox). Configure ~/.gitconfig on host to customize."
 fi
 
 # Set terminal for better experience
@@ -88,18 +82,27 @@ if [ -t 0 ]; then
     eval $(resize 2>/dev/null || true)
 fi
 
-# If running interactively, show welcome message
-if [ -t 0 ] && [ -t 1 ]; then
-    echo "🤖 AgentBox Development Environment"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "📁 Project Directory: /workspace"
-    echo "🐍 Python: $(python3 --version 2>&1 | cut -d' ' -f2) (uv available)"
-    echo "🟢 Node.js: $(node --version 2>/dev/null || echo 'not found')"
-    echo "☕ Java: $(java -version 2>&1 | head -1 | cut -d'"' -f2 || echo 'not found')"
-    echo "🤖 OpenCode: $(opencode --version 2>/dev/null || echo 'not found - check installation')"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+# ============================================================================
+# Agent Start Hook
+# ============================================================================
+
+# Determine agent from environment variable (set by agentbox script)
+AGENT="${AGENTBOX_AGENT:-opencode}"
+
+# Minimal validation as safety net (container could be misconfigured)
+AGENT_START_SCRIPT="/opt/agentbox/agents.d/${AGENT}/start.sh"
+
+if [ ! -f "${AGENT_START_SCRIPT}" ]; then
+    echo "ERROR: Agent start script not found: ${AGENT_START_SCRIPT}"
+    echo "Container was built incorrectly or agent '${AGENT}' is incomplete"
     echo ""
+    echo "Available agents in this container:"
+    ls -1 /opt/agentbox/agents.d/ 2>/dev/null | grep -v '^\.' || echo "  (none found)"
+    exit 1
 fi
 
-# Execute the command passed to docker run
-exec "$@"
+# Make start script executable
+chmod +x "${AGENT_START_SCRIPT}"
+
+# Execute agent start script (which handles welcome, MCP detection, and agent start)
+exec "${AGENT_START_SCRIPT}" "$@"
