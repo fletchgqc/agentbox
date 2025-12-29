@@ -49,6 +49,8 @@ Statt Konfigurationsvariablen definiert jeder Agent **2 Hooks + 1 Metadaten-Date
 
 **Output**: Exit code 0 bei Erfolg
 
+**Wichtig**: Muss auf dem Host executable sein (`chmod +x install.sh`)
+
 **Beispiel**:
 ```bash
 #!/bin/bash
@@ -103,6 +105,8 @@ HOST_CONFIG_DIR=""  # Keine Host-Config zum Kopieren
 **Input**: `$@` = User-Argumente (z.B. "chat", "--help")
 
 **Output**: Startet den Agent (sollte mit `exec` enden)
+
+**Wichtig**: Muss auf dem Host executable sein (`chmod +x start.sh`)
 
 **Sollte enthalten**:
 1. Welcome Message anzeigen
@@ -183,13 +187,16 @@ cp -r agents.d/.template agents.d/my-agent
 
 # 2. Dateien anpassen (install.sh, config, start.sh)
 
-# 3. Executable machen
+# 3. WICHTIG: Executable machen (erforderlich!)
 chmod +x agents.d/my-agent/*.sh
 
 # 4. Testen
 ./agentbox --rebuild --agent=my-agent
 ./agentbox --agent=my-agent
 ```
+
+**Wichtig**: Die Hook-Scripts (*.sh) müssen auf dem Host executable gemacht werden!  
+Docker's `COPY` Befehl behält die Permissions bei, und redundante `chmod` Befehle im Container können fehlschlagen.
 
 Keine Core-Code-Änderungen notwendig.
 
@@ -244,6 +251,35 @@ agents.d/
 - Agents können beliebige Pfade verwenden
 - Platzhalter für dynamische Werte
 - Optionale Werte können leer sein
+
+## Technische Details
+
+### File Permissions
+**Wichtig**: Hook-Scripts (*.sh) müssen auf dem Host executable sein!
+
+```bash
+chmod +x agents.d/my-agent/install.sh
+chmod +x agents.d/my-agent/start.sh
+```
+
+**Grund**: Docker's `COPY` Befehl behält Datei-Permissions vom Host bei. Redundante `chmod` Befehle im Dockerfile oder entrypoint.sh können fehlschlagen und sind nicht notwendig.
+
+### npm/node Verfügbarkeit
+**install.sh Scripts**: npm und node sind automatisch verfügbar via `ENV PATH` im Dockerfile.
+
+**Keine manuelle NVM-Initialisierung nötig**:
+```bash
+# ❌ NICHT nötig:
+# source "$NVM_DIR/nvm.sh"
+
+# ✅ Einfach direkt verwenden:
+npm install -g my-agent
+```
+
+Das Dockerfile richtet einen globalen Symlink ein:
+```dockerfile
+ENV PATH="/home/claude/.nvm/current/bin:${PATH}"
+```
 
 ## Erfolgs-Kriterien
 

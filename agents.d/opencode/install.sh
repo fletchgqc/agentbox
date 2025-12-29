@@ -9,7 +9,7 @@ echo "Installing OpenCode..."
 npm install -g opencode-ai
 
 # Verify installation
-if ! which opencode >/dev/null 2>&1; then
+if ! command -v opencode >/dev/null 2>&1; then
     echo "ERROR: OpenCode installation failed - binary not found"
     exit 1
 fi

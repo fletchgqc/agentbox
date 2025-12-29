@@ -14,11 +14,19 @@ Dieses Template dient als Vorlage für neue Agent-Implementierungen.
    - `config` - Volume/Config-Metadaten
    - `start.sh` - Welcome Message + Agent-Start
 
-3. Teste die Implementation:
+3. **WICHTIG: Mache die Scripts executable** (erforderlich!):
+   - Docker's `COPY` Befehl behält Datei-Permissions bei. Die Hook-Scripts müssen auf dem Host executable sein, bevor sie ins Image kopiert werden.
+   ```bash
+   chmod +x agents.d/my-agent/*.sh
+   ```
+
+4. Teste die Implementation:
    ```bash
    ./agentbox --rebuild --agent=my-agent
    ./agentbox --agent=my-agent
    ```
+
+**Hinweis**: Docker's `COPY` Befehl behält Datei-Permissions bei. Die Hook-Scripts müssen auf dem Host executable sein, bevor sie ins Image kopiert werden.
 
 ## Dateien-Spezifikation
 
@@ -31,6 +39,9 @@ Dieses Template dient als Vorlage für neue Agent-Implementierungen.
 **Input**: Keine
 
 **Output**: Exit code 0 bei Erfolg
+
+**Wichtig**: 
+- Muss executable sein: `chmod +x install.sh`
 
 **Beispiel**:
 ```bash
@@ -74,6 +85,8 @@ HOST_CONFIG_DIR="${HOME}/.config/my-agent"
 
 **Output**: Startet Agent (mit `exec`)
 
+**Wichtig**: Muss executable sein: `chmod +x start.sh`
+
 **Sollte enthalten**:
 1. Welcome Message
 2. MCP Detection (optional)
@@ -91,6 +104,7 @@ exec my-agent "$@"
 
 Bevor du deinen Agent als "fertig" markierst:
 
+- [ ] Scripts sind executable: `chmod +x agents.d/my-agent/*.sh`
 - [ ] `install.sh` installiert den Agent erfolgreich
 - [ ] `config` setzt alle 3 erforderlichen Variablen
 - [ ] `start.sh` zeigt Welcome Message

@@ -6,6 +6,9 @@
 # Input: $@ = User-Argumente (z.B. "chat", "--help")
 # Output: Startet den Agent (sollte mit 'exec' enden)
 #
+# WICHTIG: Diese Datei muss executable sein!
+#   chmod +x agents.d/your-agent/start.sh
+#
 # Dieses Script sollte enthalten:
 #   1. Welcome Message anzeigen
 #   2. MCP Configuration Detection (optional)

@@ -41,6 +41,7 @@ agents.d/
    ```bash
    #!/bin/bash
    set -euo pipefail
+   # npm ist global verfügbar
    npm install -g my-agent-package
    my-agent --version
    ```
@@ -60,11 +61,13 @@ agents.d/
    exec my-agent "$@"
    ```
 
-3. **Executable machen**:
+3. **WICHTIG: Executable machen** (erforderlich!):
    ```bash
    chmod +x agents.d/my-agent/install.sh
    chmod +x agents.d/my-agent/start.sh
    ```
+   
+   **Hinweis**: Docker's `COPY` Befehl behält Datei-Permissions bei. Die Scripts müssen auf dem Host executable sein, da `chmod` im Container fehlschlagen kann.
 
 4. **Testen**:
    ```bash
@@ -79,6 +82,7 @@ agents.d/
    ```
 
 5. **Validieren**:
+   - [ ] Scripts sind executable (`ls -l agents.d/my-agent/*.sh` zeigt `-rwxr-xr-x`)
    - [ ] Build erfolgreich
    - [ ] Agent startet
    - [ ] Welcome Message erscheint
@@ -136,7 +140,17 @@ ERROR: Agent config did not set VOLUME_NAME
 ```
 bash: ./agents.d/my-agent/install.sh: Permission denied
 ```
-**Lösung**: `chmod +x agents.d/my-agent/*.sh`
+**Lösung**: Scripts müssen auf dem Host executable gemacht werden:
+```bash
+chmod +x agents.d/my-agent/*.sh
+```
+
+### chmod Operation not permitted (im Docker Build)
+```
+chmod: changing permissions of '/opt/agentbox/agents.d/my-agent/install.sh': Operation not permitted
+```
+**Ursache**: Scripts wurden bereits vom Host mit korrekten Permissions kopiert.  
+**Lösung**: Stelle sicher, dass Scripts auf dem Host executable sind (`chmod +x`). Docker's `COPY` behält Permissions bei - kein `chmod` im Dockerfile/entrypoint nötig.
 
 ## Weitere Dokumentation
 

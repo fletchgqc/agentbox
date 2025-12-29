@@ -101,8 +101,5 @@ if [ ! -f "${AGENT_START_SCRIPT}" ]; then
     exit 1
 fi
 
-# Make start script executable
-chmod +x "${AGENT_START_SCRIPT}"
-
 # Execute agent start script (which handles welcome, MCP detection, and agent start)
 exec "${AGENT_START_SCRIPT}" "$@"

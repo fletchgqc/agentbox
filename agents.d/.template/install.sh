@@ -6,6 +6,9 @@
 # Input: Keine
 # Output: Exit code 0 bei Erfolg
 #
+# WICHTIG: Diese Datei muss executable sein!
+#   chmod +x agents.d/your-agent/install.sh
+#
 # Beispiel:
 #   npm install -g your-agent-package
 #   your-agent --version

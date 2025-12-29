@@ -99,6 +99,15 @@ RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
     echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc && \
     echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.bashrc
 
+# Make npm/node globally available for subsequent RUN commands
+# Symlink current node version to a fixed path that we can add to ENV PATH
+RUN bash -c "source $NVM_DIR/nvm.sh && \
+    mkdir -p /home/${USERNAME}/.nvm/current && \
+    ln -sf \$(nvm which current | xargs dirname) /home/${USERNAME}/.nvm/current/bin"
+
+# Add NVM current version to PATH for all subsequent RUN commands
+ENV PATH="/home/${USERNAME}/.nvm/current/bin:${PATH}"
+
 # Install Node.js global packages
 RUN bash -c "source $NVM_DIR/nvm.sh && \
     npm install -g \
@@ -211,9 +220,8 @@ ENV AGENTBOX_AGENT=${AGENTBOX_AGENT}
 
 # Install agent (validation happens in agentbox script before build)
 RUN bash -c "set -euxo pipefail; \
-    chmod +x /opt/agentbox/agents.d/\${AGENTBOX_AGENT}/*.sh; \
     /opt/agentbox/agents.d/\${AGENTBOX_AGENT}/install.sh"
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["/bin/zsh"]
+# Note: No CMD needed - agentbox script provides appropriate arguments
