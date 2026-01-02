@@ -47,37 +47,15 @@ The documentation follows these principles:
 ## Skills and Sub-agents
 - Before starting a task, check if a relevant skill or sub-agent exists and delegate if appropriate.
 
-## Build/Test Commands
-- **No automated tests exist**: Test manually using `./agentbox --help` and `./agentbox shell`
-- **Lint/Format**: No linters configured - this is a Bash project
-- **Build**: Docker image builds automatically on first run or when Dockerfile/entrypoint.sh changes
-- **Manual rebuild**: `./agentbox --rebuild`
-
-## Agent Selection
-
-AgentBox supports multiple CLI agents via a hook-based architecture.
-See [`HOOK_ARCHITECTURE.md`](HOOK_ARCHITECTURE.md) for full details.
-
-### Available Agents
-
-- **opencode** - Open-source AI agent (75+ LLM providers)
-- **claude-code** - Anthropic's Claude Code (planned)
-
-### Select Agent
-
-```bash
-./agentbox --agent=opencode           # Specific agent
-./agentbox --rebuild --agent=opencode # Rebuild with agent
-./agentbox                            # Default (claude-code, fallback: opencode)
-```
+## Architecture Notes
+- **Hook-based agents**: Each agent ships `install.sh`, `start.sh`, and a `config` file.
+- **Ephemeral containers**: Containers run with `--rm` and are destroyed on exit.
+- **Hash-based naming**: Container names use `SHA256(project_path)[0:12]`.
+- **No prompts**: All actions run automatically aside from initial SSH setup.
+- **Simplicity first**: Keep scope tight; avoid ClaudeBox-style feature creep.
 
 ### Add New Agent
+See `agents.d/README.md` for step-by-step instructions.
 
-See [`agents.d/README.md`](agents.d/README.md) for step-by-step guide.
-
-## Architecture Notes
-- **Hook-based agents**: 2 hooks + 1 metadata file per agent
-- **Ephemeral containers**: `--rm` flag, destroyed on exit
-- **Hash-based naming**: Container names use SHA256(project_path)[0:12]
-- **No prompts**: Everything automatic (except initial SSH setup)
-- **Simplicity first**: Resist feature creep vs ClaudeBox complexity
+## Operational References (read on demand)
+- Detailed instructions for build/test workflows and agent selection live in `docs/ops-guidance.md`. Only open that file when you actively need those specifics.
