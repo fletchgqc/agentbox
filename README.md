@@ -20,7 +20,25 @@ A Docker-based development environment for running AI coding agents in a safe, i
 
 AgentBox uses a **hook-based architecture** for maximum flexibility. Each agent provides 2 hooks + 1 metadata file, enabling new agents to be added without core code changes.
 
-See [`HOOK_ARCHITECTURE.md`](HOOK_ARCHITECTURE.md) for details.
+See [`HOOK_ARCHITECTURE.md`](docs/HOOK_ARCHITECTURE.md) for details.
+
+### Add a new CLI agent (z.B. Copilot CLI)
+
+Run the following prompt with your LLM, it should create all the necessary files.
+Make sure to replace _"Copilot CLI"_ with your desired agent.
+
+```aiignore
+Implement “Copilot CLI” as a new agent.  
+References:  
+- agents.d/README.md (steps)  
+- agents.d/.template (scaffold)  
+- agents.d/opencode (example)  
+- AGENTS.md, docs/HOOK_ARCHITECTURE.md (project/hook context)  
+- Copilot CLI docs: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli  
+Process: Read the docs → follow the template guidance (including chmod for executables) → run rebuild/smoke tests → done.
+```
+
+
 
 ## Supported Agents
 
@@ -244,12 +262,12 @@ Anthropic offers a [devcontainer](https://github.com/anthropics/claude-code/tree
 ### Comparison with ClaudeBox
 AgentBox began as a simplified replacement for [ClaudeBox](https://github.com/RchGrav/claudebox). I liked the ClaudeBox project, but its complexity caused a lot of bugs and I found myself maintaning my own fork with my not-yet-merged PRs. It became easier for me to build something leaner for my own needs. Comparison:
 
-| Feature | AgentBox | ClaudeBox |
-|---------|----------|-----------|
-| Files | 3 core files | 20+ files |
-| Profiles | Single unified image | 20+ language profiles |
-| Container Management | Simple per-project | Advanced slot system |
-| Setup | Automatic | Manual configuration |
+| Feature              | AgentBox             | ClaudeBox             |
+|----------------------|----------------------|-----------------------|
+| Files                | 3 core files         | 20+ files             |
+| Profiles             | Single unified image | 20+ language profiles |
+| Container Management | Simple per-project   | Advanced slot system  |
+| Setup                | Automatic            | Manual configuration  |
 
 ## Support and Contributing
 I make no guarantee to support this project in the long term. Feel free to create issues and submit PRs. I like to think that I will attend to them. The project is designed to be understandable enough that if you need specific custom changes, which you may well do, you can fork or just make them locally for yourself. Theoretically you could easily this project to other AI Agents, for example.
