@@ -89,6 +89,11 @@ fi
 # Determine agent from environment variable (set by agentbox script)
 AGENT="${AGENTBOX_AGENT:-opencode}"
 
+# Shell mode bypasses agent startup and drops directly into requested shell
+if [[ "${AGENTBOX_SHELL_MODE:-0}" == "1" ]]; then
+    exec "${@:-/bin/zsh}"
+fi
+
 # Minimal validation as safety net (container could be misconfigured)
 AGENT_START_SCRIPT="/opt/agentbox/agents.d/${AGENT}/start.sh"
 

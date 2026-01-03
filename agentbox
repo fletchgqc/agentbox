@@ -350,6 +350,14 @@ run_container() {
         --env "HISTFILE=/home/claude/.shell_history/zsh_history"
     )
 
+    # Flag shell mode for entrypoint handling
+    if [[ "$shell_mode" == "true" ]]; then
+        mount_opts+=(--env "AGENTBOX_SHELL_MODE=1")
+        if [[ "$admin_mode" == "true" ]]; then
+            mount_opts+=(--env "AGENTBOX_SHELL_ADMIN=1")
+        fi
+    fi
+
     # ========================================================================
     # Agent Configuration Setup (via Metadata)
     # ========================================================================
