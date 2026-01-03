@@ -43,6 +43,7 @@ The documentation follows these principles:
     - bad: "here is the syntax of a claude code mcp server file"
 - aim to inform the user of genuinely important/helpful information, not promote the project by listing every internal implementation detail.
 - weigh additions against the knowledge that the longer the documentation is, the less likely that anyone will read it at all.
+- For a guided inventory of all documentation files and when to read them, consult `docs/README.md`.
 
 ## Skills and Sub-agents
 - Before starting a task, check if a relevant skill or sub-agent exists and delegate if appropriate.
@@ -55,7 +56,7 @@ The documentation follows these principles:
 - **Simplicity first**: Keep scope tight; avoid ClaudeBox-style feature creep.
 
 ### Add New Agent
-See `agents.d/README.md` for step-by-step instructions.
+See `agents.d/README.md` for the canonical step-by-step instructions on adding agents.
 
 ## Operational References (read on demand)
-- Detailed instructions for build/test workflows and agent selection live in `docs/ops-guidance.md`. Only open that file when you actively need those specifics.
+- Detailed instructions for build/test workflows and agent selection live in `docs/OPS_GUIDANCE.md`. Only open that file when you actively need those specifics.

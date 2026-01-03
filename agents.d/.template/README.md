@@ -1,49 +1,49 @@
 # Agent Template
 
-Dieses Template dient als Vorlage für neue Agent-Implementierungen.
+This template is meant as a guide for creating new agent implementations.
 
-## Verwendung
+## Usage
 
-1. Kopiere das Template-Verzeichnis:
+1. Copy the template:
    ```bash
    cp -r agents.d/.template agents.d/my-agent
    ```
 
-2. Passe die Dateien an:
-   - `install.sh` - Installation deines Agents
-   - `config` - Volume/Config-Metadaten
-   - `start.sh` - Welcome Message + Agent-Start
+2. Adjust the files:
+   - `install.sh` – installs your agent
+   - `config` – metadata for volumes and configs
+   - `start.sh` – welcome message + agent start
 
-3. **WICHTIG: Mache die Scripts executable** (erforderlich!):
-   - Docker's `COPY` Befehl behält Datei-Permissions bei. Die Hook-Scripts müssen auf dem Host executable sein, bevor sie ins Image kopiert werden.
+3. **IMPORTANT: Make the scripts executable** (required!)
+   - Docker's `COPY` preserves file permissions, so the hook scripts must already be executable before adding them to the image.
    ```bash
    chmod +x agents.d/my-agent/*.sh
    ```
 
-4. Teste die Implementation:
+4. Test the implementation:
    ```bash
    ./agentbox --rebuild --agent=my-agent
    ./agentbox --agent=my-agent
    ```
 
-**Hinweis**: Docker's `COPY` Befehl behält Datei-Permissions bei. Die Hook-Scripts müssen auf dem Host executable sein, bevor sie ins Image kopiert werden.
+**Note**: Docker's `COPY` keeps host permissions, so ensure the hook scripts are executable before building.
 
-## Dateien-Spezifikation
+## File specification
 
 ### install.sh
 
-**Zweck**: Agent installieren
+**Purpose**: install the agent
 
-**Aufruf**: Während `docker build`
+**Invoked**: during `docker build`
 
-**Input**: Keine
+**Input**: none
 
-**Output**: Exit code 0 bei Erfolg
+**Output**: exit code 0 on success
 
-**Wichtig**: 
-- Muss executable sein: `chmod +x install.sh`
+**Important**:
+- must be executable: `chmod +x install.sh`
 
-**Beispiel**:
+**Example**:
 ```bash
 #!/bin/bash
 set -euo pipefail
@@ -53,22 +53,22 @@ my-agent --version
 
 ### config
 
-**Zweck**: Metadaten für Volume/Config-Setup
+**Purpose**: metadata for the volume/config setup
 
-**Aufruf**: In `agentbox` script (via `source`)
+**Invoked**: sourced by the `agentbox` script
 
-**Format**: Key-Value Paare (Bash-Variablen)
+**Format**: key-value pairs (Bash variables)
 
-**Verpflichtende Variablen**:
-- `VOLUME_NAME` - Docker Volume Name
-- `MOUNT_PATH` - Mount-Pfad im Container
-- `HOST_CONFIG_DIR` - Config-Verzeichnis auf Host (kann leer sein)
+**Mandatory variables**:
+- `VOLUME_NAME` – Docker volume name
+- `MOUNT_PATH` – mount path in the container
+- `HOST_CONFIG_DIR` – host config directory (can be empty)
 
-**Platzhalter** (werden von AgentBox ersetzt):
-- `${HASH}` - Container-Hash
-- `${AGENT}` - Agent-Name
+**Placeholders** (substituted by AgentBox):
+- `${HASH}` – container hash
+- `${AGENT}` – agent name
 
-**Beispiel**:
+**Example**:
 ```bash
 VOLUME_NAME="agentbox-config-${HASH}"
 MOUNT_PATH="/home/claude/.config/my-agent"
@@ -77,42 +77,43 @@ HOST_CONFIG_DIR="${HOME}/.config/my-agent"
 
 ### start.sh
 
-**Zweck**: Agent starten
+**Purpose**: launch the agent
 
-**Aufruf**: Von `entrypoint.sh` beim Container-Start
+**Invoked**: by `entrypoint.sh` when the container starts
 
-**Input**: `$@` = User-Argumente
+**Input**: `$@` = user arguments
 
-**Output**: Startet Agent (mit `exec`)
+**Output**: starts the agent (with `exec`)
 
-**Wichtig**: Muss executable sein: `chmod +x start.sh`
+**Important**: must be executable: `chmod +x start.sh`
 
-**Sollte enthalten**:
-1. Welcome Message
-2. MCP Detection (optional)
-3. Agent Start (exec)
+**Should include**:
+1. welcome message
+2. MCP detection (optional)
+3. agent start (exec)
 
-**Beispiel**:
+**Example**:
 ```bash
 #!/bin/bash
 set -euo pipefail
+
 echo "🤖 My Agent: $(my-agent --version)"
 exec my-agent "$@"
 ```
 
-## Validierung
+## Validation
 
-Bevor du deinen Agent als "fertig" markierst:
+Before you mark your agent as "done":
 
-- [ ] Scripts sind executable: `chmod +x agents.d/my-agent/*.sh`
-- [ ] `install.sh` installiert den Agent erfolgreich
-- [ ] `config` setzt alle 3 erforderlichen Variablen
-- [ ] `start.sh` zeigt Welcome Message
-- [ ] `start.sh` startet den Agent mit `exec`
-- [ ] Build Test: `./agentbox --rebuild --agent=my-agent`
-- [ ] Start Test: `./agentbox --agent=my-agent`
-- [ ] Volume Test: Config bleibt nach Container-Neustart
+- [ ] Scripts are executable: `chmod +x agents.d/my-agent/*.sh`
+- [ ] `install.sh` installs the agent successfully
+- [ ] `config` sets all three required variables
+- [ ] `start.sh` displays a welcome message
+- [ ] `start.sh` launches the agent with `exec`
+- [ ] Build test: `./agentbox --rebuild --agent=my-agent`
+- [ ] Start test: `./agentbox --agent=my-agent`
+- [ ] Volume test: configuration persists after container restart
 
-## Beispiel: OpenCode
+## Example: OpenCode
 
-Siehe `agents.d/opencode/` für eine vollständige Referenz-Implementierung.
+See `agents.d/opencode/` for a full reference implementation.

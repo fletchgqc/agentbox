@@ -24,7 +24,7 @@ AgentBox supports multiple CLI agents via a hook-based architecture. Full detail
 ```
 
 ### Add New Agent
-See `agents.d/README.md` for step-by-step instructions.
+See `agents.d/README.md` for the canonical step-by-step instructions on adding agents.
 
 ## Architecture Notes
 - **Hook-based agents**: Each agent ships `install.sh`, `start.sh`, and a `config` file.
