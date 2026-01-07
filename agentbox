@@ -257,6 +257,21 @@ run_container() {
 
     local cmd_args=("$@")
 
+    local host_opencode_data_dir_raw="${OPENCODE_DATA_DIR:-${HOME}/.local/share/opencode}"
+    local host_opencode_data_dir
+    host_opencode_data_dir=$(expand_tilde "$host_opencode_data_dir_raw")
+
+    if ! is_absolute_path "$host_opencode_data_dir"; then
+        log_error "OPENCODE_DATA_DIR must be an absolute path (current: $host_opencode_data_dir_raw)"
+        return 1
+    fi
+
+    if [[ ! -d "$host_opencode_data_dir" ]]; then
+        mkdir -p "$host_opencode_data_dir"
+        chmod 700 "$host_opencode_data_dir" 2>/dev/null || true
+        log_info "Created OpenCode data directory: $host_opencode_data_dir"
+    fi
+
     if [[ "$admin_mode" == "true" ]]; then
         log_success "Starting container for: $PROJECT_NAME (admin shell)"
     else
@@ -341,6 +356,13 @@ run_container() {
     mount_opts+=(--env "OPENCODE_CONFIG_DIR=/home/claude/.config/opencode")
 
     log_info "OpenCode configuration mounted"
+
+    # Bind mount OpenCode data/auth directory (host authoritative)
+    mount_opts+=(
+        -v "${host_opencode_data_dir}:/home/claude/.local/share/opencode"
+        --env "OPENCODE_DATA_DIR=/home/claude/.local/share/opencode"
+    )
+    log_info "OpenCode auth/session data mounted"
 
     # Mount project directory path info for direnv approval translation
     if [[ -f "$PROJECT_DIR/.envrc" ]]; then

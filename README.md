@@ -163,33 +163,39 @@ Package manager caches are stored in `~/.cache/agentbox/<container-name>/`:
 ### Shell History
 Zsh history is preserved in `~/.agentbox/projects/<container-name>/history`
 
-### Claude CLI Authentication
-Authentication data is stored in Docker named volumes (`agentbox-claude-<hash>`), providing:
-- Per-project Claude CLI configuration
-- Persistent authentication across container restarts
-- Isolation between different projects
+### OpenCode Configuration + Auth Persistence
+- Config (`~/.config/opencode`) mounts via Docker volume initialized from your host copy the first time you run `agentbox`.
+- Auth/session data (`~/.local/share/opencode`) bind-mounts directly from the host so `opencode auth login` persists across container runs.
+- Override host paths with `OPENCODE_CONFIG_DIR` or `OPENCODE_DATA_DIR` before launching `agentbox` if you store OpenCode data elsewhere.
+- To reset everything, delete the host directory (e.g., `rm -rf ~/.local/share/opencode`) and remove the matching Docker volume (`docker volume rm agentbox-config-<hash>`).
 
 ## Volume Management
 
 ### Listing Volumes
 ```bash
-# List all AgentBox volumes
-docker volume ls | grep agentbox-claude
+# List all AgentBox config volumes
+docker volume ls | grep agentbox-config
 ```
 
 ### Cleanup
 ```bash
-# Remove specific project's authentication
-docker volume rm agentbox-claude-<hash>
+# Remove specific project's configuration volume
+docker volume rm agentbox-config-<hash>
 
-# Remove all AgentBox volumes (clears all authentication)
-docker volume ls -q | grep agentbox-claude | xargs docker volume rm
+# Remove all AgentBox config volumes
+docker volume ls -q | grep agentbox-config | xargs docker volume rm
 
 # Full cleanup (removes image and optionally cached data)
 agentbox --cleanup
 ```
 
-**Note**: Removing volumes only affects authentication - your project files remain untouched.
+**Note**: Removing volumes or deleting `~/.local/share/opencode` only affects OpenCode auth/config—project files remain untouched.
+
+### Manual Verification
+1. Run `./agentbox shell` and execute `opencode auth list` to confirm host providers were imported.
+2. Inside the container run `opencode auth login` (or add a provider), exit, then rerun `./agentbox shell` to ensure the new credentials persist.
+3. Start the default `./agentbox` TUI and confirm it reuses the same OpenCode session without re-authenticating.
+4. Run `agentbox --cleanup` when you want to force a fresh environment.
 
 ## Advanced Usage
 

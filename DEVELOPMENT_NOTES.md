@@ -17,7 +17,7 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 
 2. **Hash-Based Naming**: Container names use SHA256 hash of project directory path (first 12 chars) to ensure uniqueness and avoid conflicts.
 
-3. **Volume Strategy**: Claude CLI config uses Docker named volumes (not bind mounts) to avoid permission issues. Initialized from `~/.claude` if it exists.
+3. **Volume Strategy**: OpenCode config uses Docker named volumes (seeded from `~/.config/opencode` when available) while auth/session data bind-mounts from `~/.local/share/opencode` so credentials persist between runs.
 
 4. **SSH Implementation**: Currently mounts `~/.agentbox/ssh/` directory directly (not true SSH agent forwarding). Future improvement could use Docker's `--ssh` flag for better security.
 
@@ -44,16 +44,17 @@ After each successful rebuild, `docker image prune -f --filter "label=agentbox.v
 
 ### Mount Points
 ```bash
-/workspace              # Project directory (main mount, always current directory)
-/<directory_name>       # Additional directories (via --add-dir flag, using folder basenames e.g., /foo, /bar)
-/home/claude/.ssh       # SSH keys from ~/.agentbox/ssh/
-/home/claude/.gitconfig # Git config (read-only)
-/home/claude/.npm       # NPM cache
-/home/claude/.cache/pip # Pip cache
-/home/claude/.m2        # Maven cache
-/home/claude/.gradle    # Gradle cache
-/home/claude/.shell_history  # History directory (HISTFILE env var points to zsh_history inside)
-/home/claude/.claude    # Claude config (Docker volume)
+/workspace                          # Project directory (main mount, always current directory)
+/<directory_name>                   # Additional directories (via --add-dir flag, using folder basenames e.g., /foo, /bar)
+/home/claude/.ssh                   # SSH keys from ~/.agentbox/ssh/
+/home/claude/.gitconfig             # Git config (read-only)
+/home/claude/.npm                   # NPM cache
+/home/claude/.cache/pip             # Pip cache
+/home/claude/.m2                    # Maven cache
+/home/claude/.gradle                # Gradle cache
+/home/claude/.shell_history         # History directory (HISTFILE env var points to zsh_history inside)
+/home/claude/.config/opencode       # OpenCode config (Docker volume seeded from host ~/.config/opencode)
+/home/claude/.local/share/opencode  # OpenCode auth/session data (bind mount to host ~/.local/share/opencode)
 ```
 
 ## Testing Status
