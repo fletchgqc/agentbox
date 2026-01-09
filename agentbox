@@ -373,11 +373,18 @@ run_container() {
         container_cmd=(zsh -c "source ~/.zshrc && exec $claude_cmd")
     fi
 
-    # Check for .env file in project directory and add to docker args
+    # Load global .env file first (PROJECT_DIR/.env will override)
     local env_file_args=()
+    local agentbox_env="${HOME}/.agentbox/.env"
+    if [[ -f "$agentbox_env" ]]; then
+        env_file_args+=(--env-file "$agentbox_env")
+        log_info "Global .env loaded from ~/.agentbox/.env"
+    fi
+
+    # Load project-specific .env (overrides global .env)
     if [[ -f "$PROJECT_DIR/.env" ]]; then
         env_file_args+=(--env-file "$PROJECT_DIR/.env")
-        log_info ".env file found and will be loaded into container"
+        log_info "Project .env file found and will be loaded into container"
     fi
 
     # Build port forwarding arguments

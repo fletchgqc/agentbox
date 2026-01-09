@@ -135,6 +135,18 @@ This will:
 ### Environment Variables
 If a `.env` file exists in your project directory, the environment variables defined there will automatically be loaded into the container.
 
+**Global Environment Variables:**
+You can also create a global `.env` file at `~/.agentbox/.env` for shared configuration across all projects (e.g., API keys for third-party inference providers). Environment variables are loaded in this order:
+1. Global `.env` from `~/.agentbox/.env` (if it exists)
+2. Project `.env` from `<project-dir>/.env` (if it exists)
+
+Project-specific variables override global variables. This is useful for credentials that should be shared across projects, such as:
+```bash
+# ~/.agentbox/.env
+ANTHROPIC_BASE_URL=https://api.example.com/v1
+ANTHROPIC_API_KEY=your-shared-key-here
+```
+
 AgentBox also includes `direnv` support - if you have a `.envrc` file in your project directory, it will be automatically evaluated inside the container if you have `direnv allow`ed it on your host machine.
 
 ## MCP Server Configuration
