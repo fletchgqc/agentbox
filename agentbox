@@ -380,7 +380,6 @@ run_container() {
         log_info "Global .env loaded from ~/.agentbox/.env"
     fi
 
-    # Load project-specific .env (overrides global .env)
     if [[ -f "$PROJECT_DIR/.env" ]]; then
         env_file_args+=(--env-file "$PROJECT_DIR/.env")
         log_info "Project .env loaded from $PROJECT_DIR/.env"
