@@ -139,6 +139,7 @@ Environment variables are loaded from `.env` files in this order (later override
 2. `<project-dir>/.env` (project-specific)
 
 AgentBox includes `direnv` support - `.envrc` files are evaluated if `direnv allow`ed on the host.
+
 ## MCP Server Configuration
 
 Due to [Claude Code bug #6130](https://github.com/anthropics/claude-code/issues/6130), by default you won't be prompted to enable MCP servers when running `agentbox` directly.
