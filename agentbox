@@ -384,7 +384,7 @@ run_container() {
     # Load project-specific .env (overrides global .env)
     if [[ -f "$PROJECT_DIR/.env" ]]; then
         env_file_args+=(--env-file "$PROJECT_DIR/.env")
-        log_info "Project .env file found and will be loaded into container"
+        log_info "Project .env loaded from $PROJECT_DIR/.env"
     fi
 
     # Build port forwarding arguments

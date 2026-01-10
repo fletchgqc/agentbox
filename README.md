@@ -136,24 +136,11 @@ This will:
 3. Generate a new Ed25519 key pair (if preferred, delete them and manually place your desired SSH keys in `~/.agentbox/ssh/`).
 
 ### Environment Variables
-If a `.env` file exists in your project directory, the environment variables defined there will automatically be loaded into the container.
+Environment variables are loaded from `.env` files in this order (later overrides earlier):
+1. `~/.agentbox/.env` (global)
+2. `<project-dir>/.env` (project-specific)
 
-**Global Environment Variables:**
-You can also create a global `.env` file at `~/.agentbox/.env` for shared configuration across all projects (e.g., API keys for third-party inference providers). Environment variables are loaded in this order:
-1. Global `.env` from `~/.agentbox/.env` (if it exists)
-2. Project `.env` from `<project-dir>/.env` (if it exists)
-
-Project-specific variables override global variables. This is useful for credentials that should be shared across projects, such as:
-```bash
-# ~/.agentbox/.env
-ANTHROPIC_BASE_URL=https://api.example.com/v1
-ANTHROPIC_AUTH_TOKEN=your-shared-key-here
-```
-
-**Note:** Use `ANTHROPIC_AUTH_TOKEN` (not `ANTHROPIC_API_KEY`) for API authentication with Claude Code.
-
-AgentBox also includes `direnv` support - if you have a `.envrc` file in your project directory, it will be automatically evaluated inside the container if you have `direnv allow`ed it on your host machine.
-
+AgentBox includes `direnv` support - `.envrc` files are evaluated if `direnv allow`ed on the host.
 ## MCP Server Configuration
 
 Due to [Claude Code bug #6130](https://github.com/anthropics/claude-code/issues/6130), by default you won't be prompted to enable MCP servers when running `agentbox` directly.
