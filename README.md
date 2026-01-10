@@ -57,8 +57,6 @@ agentbox --help
 # Start Claude CLI in container (--dangerously-skip-permissions is automatically included)
 agentbox
 
-# Specify a custom model (for third-party inference providers)
-agentbox --model glm-4.7
 
 # Non-agentbox CLI flags are passed through to claude.
 # For example, to continue the most recent session
