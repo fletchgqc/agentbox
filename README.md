@@ -57,6 +57,9 @@ agentbox --help
 # Start Claude CLI in container (--dangerously-skip-permissions is automatically included)
 agentbox
 
+# Specify a custom model (for third-party inference providers)
+agentbox --model glm-4.7
+
 # Non-agentbox CLI flags are passed through to claude.
 # For example, to continue the most recent session
 agentbox -c
@@ -144,8 +147,10 @@ Project-specific variables override global variables. This is useful for credent
 ```bash
 # ~/.agentbox/.env
 ANTHROPIC_BASE_URL=https://api.example.com/v1
-ANTHROPIC_API_KEY=your-shared-key-here
+ANTHROPIC_AUTH_TOKEN=your-shared-key-here
 ```
+
+**Note:** Use `ANTHROPIC_AUTH_TOKEN` (not `ANTHROPIC_API_KEY`) for API authentication with Claude Code.
 
 AgentBox also includes `direnv` support - if you have a `.envrc` file in your project directory, it will be automatically evaluated inside the container if you have `direnv allow`ed it on your host machine.
 
