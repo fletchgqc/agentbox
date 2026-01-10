@@ -373,7 +373,6 @@ run_container() {
         container_cmd=(zsh -c "source ~/.zshrc && exec $claude_cmd")
     fi
 
-    # Load global .env file first (PROJECT_DIR/.env will override)
     local env_file_args=()
     local agentbox_env="${HOME}/.agentbox/.env"
     if [[ -f "$agentbox_env" ]]; then
