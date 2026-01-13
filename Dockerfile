@@ -207,6 +207,12 @@ RUN bash -c "source $NVM_DIR/nvm.sh && \
     which claude && claude --version && \
     which opencode && opencode --version"
 
+# Docker Sandboxes compatibility: lock directory and symlinks (node/claude on PATH without shell init)
+RUN bash -c "source $NVM_DIR/nvm.sh && \
+    mkdir -p ~/.docker/sandbox/locks && \
+    sudo ln -sf \"\$(which node)\" /usr/local/bin/node && \
+    sudo ln -sf \"\$(which claude)\" /usr/local/bin/claude"
+
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/bin/zsh"]
