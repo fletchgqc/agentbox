@@ -1,0 +1,21 @@
+FROM docker.io/debian:stable-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends tinyproxy inotify-tools && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /home/tinyproxy
+COPY tinyproxy.conf /home/tinyproxy/tinyproxy.conf
+COPY allowlist.txt /home/tinyproxy/allowlist.txt
+COPY entrypoint.sh /home/tinyproxy/entrypoint.sh
+
+RUN chmod 644 /home/tinyproxy/tinyproxy.conf && \
+    chmod 644 /home/tinyproxy/allowlist.txt && \
+    chmod 755 /home/tinyproxy/entrypoint.sh && \
+    chown -R nobody:nogroup /home/tinyproxy
+
+USER nobody
+EXPOSE 8888
+
+ENTRYPOINT ["/home/tinyproxy/entrypoint.sh"]

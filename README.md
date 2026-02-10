@@ -69,6 +69,9 @@ agentbox -c
 # Mount additional directories for multi-project access
 agentbox --add-dir ~/proj1 --add-dir ~/proj2
 
+# Restrict outbound network to allowlisted domains
+agentbox --proxy
+
 # Start shell with sudo privileges
 agentbox shell --admin
 
@@ -184,6 +187,26 @@ Both tools use bind mounts to share authentication across all AgentBox projects:
 **OpenCode**:
 - Config: `~/.config/opencode` mounted at `/home/agent/.config/opencode`
 - Auth: `~/.local/share/opencode` mounted at `/home/agent/.local/share/opencode`
+
+## Network Proxy
+
+The `--proxy` flag restricts outbound network access to an allowlisted set of domains using a sidecar tinyproxy container on an isolated network. All HTTP/HTTPS traffic must pass through the proxy; non-HTTP traffic (including git-over-SSH) is blocked.
+
+A default allowlist covering package registries, git hosts, and AI APIs is created per-project at `~/.agentbox/proxy/<container-name>/allowlist.txt` on first use.
+
+```bash
+# Manage the per-project allowlist
+agentbox proxy list                 # Show allowed domains
+agentbox proxy allow example.com    # Add a domain
+agentbox proxy block example.com    # Remove a domain
+agentbox proxy reset                # Reset to defaults
+
+# Inspect proxy activity (requires running proxy)
+agentbox proxy log [-f]             # View proxy log
+agentbox proxy blocked              # Show denied domains with hit counts
+```
+
+Limitations: only HTTPS on port 443 is tunneled (non-standard ports like 8443 are blocked). Allowlist patterns use POSIX basic regex — extended syntax (`+`, `?`, `|`) is not supported.
 
 ## Advanced Usage
 

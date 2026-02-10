@@ -28,7 +28,11 @@ AgentBox is a simplified replacement for ClaudeBox. The user was maintaining pat
 ### File Responsibilities
 - `Dockerfile`: Multi-stage build with all language toolchains. Uses `USER agent` (UID 1000)
 - `entrypoint.sh`: Minimal - only sets PATH and creates Python venvs
-- `agentbox`: Main logic - rebuild detection, container lifecycle, mount management
+- `agentbox`: Main logic - rebuild detection, container lifecycle, mount management, proxy orchestration
+- `proxy/Containerfile`: Debian stable-slim + tinyproxy + inotify-tools, runs as `nobody`
+- `proxy/tinyproxy.conf`: FilterDefaultDeny config, port 8888, regex-based allowlist
+- `proxy/entrypoint.sh`: Starts tinyproxy + inotifywait loop for hot-reload on allowlist changes
+- `proxy/allowlist.txt`: Default allowlist template (package registries, git hosts, AI APIs)
 
 ### Rebuild Detection
 Automatic rebuilds are triggered by:
@@ -72,6 +76,35 @@ AgentBox supports both Docker and Podman via automatic detection:
 
 ### Image Cleanup Strategy
 After each successful rebuild, `$RUNTIME image prune -f --filter "label=agentbox.version"` removes dangling agentbox images. This prevents accumulation over time without manual intervention.
+
+### Proxy Architecture
+
+The `--proxy` flag enables network isolation using a sidecar tinyproxy container:
+
+1. **Isolated network**: An internal bridge network isolates the agent container from the internet
+2. **Proxy sidecar**: A tinyproxy container bridges the internal network and the default network, filtering all HTTP/HTTPS traffic against a POSIX basic regex allowlist
+3. **Agent container**: Connects only to the internal network; `HTTP_PROXY`/`HTTPS_PROXY` env vars route all traffic through the proxy
+4. **Hot-reload**: inotifywait monitors the allowlist file; changes trigger tinyproxy reload without container restart
+
+**Runtime-specific networking**: Docker and Podman require different approaches to attach the proxy container to both the internal and default networks:
+- **Docker**: Starts proxy on the default bridge, then uses `docker network connect` to add the internal network. Docker's embedded DNS (127.0.0.11) handles external resolution transparently.
+- **Podman**: Rootless Podman (pasta) does not support `network connect`. Instead, the proxy starts with both `--network podman --network <internal>` at launch. The internal network is created with `--disable-dns` to prevent aardvark-dns from shadowing upstream resolvers with NXDOMAIN for external names. An explicit `--dns` flag provides the host's upstream DNS (falls back to 8.8.8.8 when the host uses systemd-resolved's 127.0.0.53 stub).
+
+**Known limitations**:
+- `ConnectPort 443`: tinyproxy only allows CONNECT (HTTPS tunneling) to port 443. HTTPS services on non-standard ports (8443, 9443, etc.) are blocked even if the domain is allowlisted.
+- `FilterExtended` is not enabled: allowlist patterns use POSIX basic regex. Extended regex features (`+`, `?`, `|`, unescaped `{}`/`()`) do not work. For example, `^(foo|bar)\.com$` will not match as expected. Adding `FilterExtended Yes` to `tinyproxy.conf` would enable POSIX extended regex if needed.
+
+**Cleanup strategy**: Normal exit triggers an EXIT trap that stops the proxy container and removes the network. Abnormal exit (kill -9) leaves orphans that are cleaned up on the next `--proxy` invocation via `cleanup_stale_proxy()`.
+
+**Per-project allowlists**: Stored at `~/.agentbox/proxy/<container-name>/allowlist.txt`, initialized from `proxy/allowlist.txt` on first use.
+
+**Proxy functions in agentbox script**:
+- `get_proxy_container_name/network_name()`: Naming using project hash (same as main container)
+- `ensure_proxy_allowlist()`: Creates per-project allowlist from template
+- `needs_proxy_rebuild/build_proxy_image()`: Same hash-based rebuild pattern as main image
+- `start_proxy()`: Orchestrates cleanup → allowlist → build → network → container → IP detection
+- `cleanup_proxy/cleanup_stale_proxy()`: Trap handler and orphan cleanup
+- `cmd_proxy()`: CLI dispatcher for allow/block/list/log/blocked/reset subcommands
 
 ### Mount Points
 ```bash
@@ -141,6 +174,10 @@ The `agentbox` script has these key functions:
 - `validate_dir_path()`: Validate directory paths (traversal check, system dirs, existence, duplicates)
 - `run_container()`: Main container execution logic with all mounts and command execution
 - `ssh_setup()`: Initialize ~/.agentbox/ssh/ directory
+- `start_proxy()`: Orchestrate proxy sidecar lifecycle (build, network, container, IP)
+- `cleanup_proxy()`: Stop proxy container and remove network (EXIT trap handler)
+- `cleanup_stale_proxy()`: Find and remove orphaned proxy containers/networks
+- `cmd_proxy()`: Dispatch proxy subcommands (allow/block/list/log/blocked/reset)
 
 ## Critical Implementation Notes
 
@@ -156,6 +193,7 @@ The `agentbox` script has these key functions:
 
 ## File Count
 - Core files: 3 (Dockerfile, entrypoint.sh, agentbox)
+- Proxy files: 4 (proxy/Containerfile, proxy/tinyproxy.conf, proxy/entrypoint.sh, proxy/allowlist.txt)
 - Documentation: 2 (README.md, DEVELOPMENT_NOTES.md)
 - Other: .gitignore, LICENSE, CLAUDE.md
-- Total: ~8 files (vs ClaudeBox's 20+)
+- Total: ~12 files (vs ClaudeBox's 20+)

@@ -23,9 +23,16 @@ readonly DOCKERFILE_PATH="${SCRIPT_DIR}/Dockerfile"
 readonly ENTRYPOINT_PATH="${SCRIPT_DIR}/entrypoint.sh"
 readonly IMAGE_NAME="agentbox:latest"
 readonly CONTAINER_PREFIX="agentbox"
+readonly PROXY_DIR="${SCRIPT_DIR}/proxy"
+readonly PROXY_IMAGE_NAME="agentbox-proxy:latest"
 
 # Set by check_runtime() in main()
 RUNTIME=""
+
+# Proxy state (set by start_proxy, cleaned up by cleanup_proxy)
+PROXY_NETWORK=""
+PROXY_CONTAINER=""
+PROXY_IP=""
 
 # Colors for output
 readonly RED='\033[0;31m'
@@ -246,13 +253,346 @@ mount_additional_dirs() {
     done
 }
 
+# --- Proxy functions ---
+
+get_proxy_container_name() {
+    local project_hash=$(echo -n "$PROJECT_DIR" | sha256sum | cut -c1-12)
+    echo "agentbox-proxy-${project_hash}"
+}
+
+get_proxy_network_name() {
+    local project_hash=$(echo -n "$PROJECT_DIR" | sha256sum | cut -c1-12)
+    echo "agentbox-net-${project_hash}"
+}
+
+get_proxy_data_dir() {
+    local container_name="$1"
+    echo "${HOME}/.agentbox/proxy/${container_name}"
+}
+
+get_proxy_allowlist_path() {
+    local container_name="$1"
+    echo "$(get_proxy_data_dir "$container_name")/allowlist.txt"
+}
+
+ensure_proxy_allowlist() {
+    local container_name="$1"
+    local data_dir
+    data_dir=$(get_proxy_data_dir "$container_name")
+    local allowlist_path="${data_dir}/allowlist.txt"
+
+    mkdir -p "$data_dir"
+    if [[ ! -f "$allowlist_path" ]]; then
+        cp "${PROXY_DIR}/allowlist.txt" "$allowlist_path"
+        log_info "Created default proxy allowlist at ${allowlist_path}"
+    fi
+}
+
+needs_proxy_rebuild() {
+    local containerfile_hash=$(calculate_hash "${PROXY_DIR}/Containerfile")
+    local conf_hash=$(calculate_hash "${PROXY_DIR}/tinyproxy.conf")
+    local entrypoint_hash=$(calculate_hash "${PROXY_DIR}/entrypoint.sh")
+    local allowlist_hash=$(calculate_hash "${PROXY_DIR}/allowlist.txt")
+    local combined_hash="${containerfile_hash}-${conf_hash}-${entrypoint_hash}-${allowlist_hash}"
+
+    if ! $RUNTIME image inspect "$PROXY_IMAGE_NAME" &>/dev/null; then
+        return 0
+    fi
+
+    local stored_hash=$($RUNTIME inspect "$PROXY_IMAGE_NAME" \
+        --format '{{ index .Config.Labels "agentbox-proxy.hash" }}' 2>/dev/null || echo "none")
+
+    if [[ "$combined_hash" != "$stored_hash" ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+build_proxy_image() {
+    local containerfile_hash=$(calculate_hash "${PROXY_DIR}/Containerfile")
+    local conf_hash=$(calculate_hash "${PROXY_DIR}/tinyproxy.conf")
+    local entrypoint_hash=$(calculate_hash "${PROXY_DIR}/entrypoint.sh")
+    local allowlist_hash=$(calculate_hash "${PROXY_DIR}/allowlist.txt")
+    local combined_hash="${containerfile_hash}-${conf_hash}-${entrypoint_hash}-${allowlist_hash}"
+
+    log_build "Building proxy image..."
+
+    if $RUNTIME build \
+        --label "agentbox-proxy.hash=${combined_hash}" \
+        --label "agentbox-proxy.version=1.0.0" \
+        -f "${PROXY_DIR}/Containerfile" \
+        -t "$PROXY_IMAGE_NAME" \
+        "$PROXY_DIR"; then
+        log_success "Proxy image built successfully!"
+        $RUNTIME image prune -f --filter "label=agentbox-proxy.version" &>/dev/null || true
+        return 0
+    else
+        log_error "Failed to build proxy image"
+        return 1
+    fi
+}
+
+cleanup_stale_proxy() {
+    local proxy_container_name
+    proxy_container_name=$(get_proxy_container_name)
+    local proxy_network_name
+    proxy_network_name=$(get_proxy_network_name)
+
+    if $RUNTIME inspect "$proxy_container_name" &>/dev/null; then
+        log_info "Cleaning up stale proxy container: $proxy_container_name"
+        $RUNTIME stop "$proxy_container_name" &>/dev/null || true
+        $RUNTIME rm -f "$proxy_container_name" &>/dev/null || true
+    fi
+
+    if $RUNTIME network inspect "$proxy_network_name" &>/dev/null; then
+        log_info "Cleaning up stale proxy network: $proxy_network_name"
+        $RUNTIME network rm "$proxy_network_name" &>/dev/null || true
+    fi
+}
+
+get_proxy_ip() {
+    local container_name="$1"
+    local network_name="$2"
+    $RUNTIME inspect "$container_name" \
+        --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" 2>/dev/null
+}
+
+cleanup_proxy() {
+    if [[ -n "$PROXY_CONTAINER" ]]; then
+        $RUNTIME stop "$PROXY_CONTAINER" &>/dev/null || true
+    fi
+    if [[ -n "$PROXY_NETWORK" ]]; then
+        $RUNTIME network rm "$PROXY_NETWORK" &>/dev/null || true
+    fi
+}
+
+start_proxy() {
+    local agentbox_container_name="$1"
+    local proxy_container_name
+    proxy_container_name=$(get_proxy_container_name)
+    local proxy_network_name
+    proxy_network_name=$(get_proxy_network_name)
+
+    cleanup_stale_proxy
+
+    ensure_proxy_allowlist "$agentbox_container_name"
+
+    if needs_proxy_rebuild; then
+        if ! build_proxy_image; then
+            log_error "Proxy image build failed!"
+            exit 1
+        fi
+    fi
+
+    log_info "Creating isolated network: $proxy_network_name"
+
+    local allowlist_path
+    allowlist_path=$(get_proxy_allowlist_path "$agentbox_container_name")
+
+    log_info "Starting proxy container: $proxy_container_name"
+
+    if [[ "$RUNTIME" == "podman" ]]; then
+        # Podman rootless (pasta) doesn't support `network connect`, so start
+        # the proxy on both networks from the beginning. We also disable DNS on
+        # the internal network so that aardvark-dns doesn't shadow the host's
+        # upstream resolver with NXDOMAIN responses for external names.
+        local host_dns
+        host_dns=$(awk '/^nameserver/{print $2; exit}' /etc/resolv.conf 2>/dev/null)
+        # systemd-resolved stub (127.0.0.53) doesn't work inside containers
+        if [[ -z "$host_dns" || "$host_dns" == 127.* ]]; then
+            host_dns="8.8.8.8"
+        fi
+
+        $RUNTIME network create --internal --disable-dns "$proxy_network_name" >/dev/null
+        $RUNTIME run -d --rm \
+            --name "$proxy_container_name" \
+            --network podman \
+            --network "$proxy_network_name" \
+            --dns "$host_dns" \
+            -v "${allowlist_path}:/home/tinyproxy/allowlist.txt:z" \
+            "$PROXY_IMAGE_NAME" >/dev/null
+    else
+        $RUNTIME network create --internal "$proxy_network_name" >/dev/null
+        $RUNTIME run -d --rm \
+            --name "$proxy_container_name" \
+            -v "${allowlist_path}:/home/tinyproxy/allowlist.txt:z" \
+            "$PROXY_IMAGE_NAME" >/dev/null
+        $RUNTIME network connect "$proxy_network_name" "$proxy_container_name"
+    fi
+
+    local proxy_ip
+    proxy_ip=$(get_proxy_ip "$proxy_container_name" "$proxy_network_name")
+
+    if [[ -z "$proxy_ip" ]]; then
+        log_error "Failed to get proxy IP address"
+        $RUNTIME stop "$proxy_container_name" &>/dev/null || true
+        $RUNTIME network rm "$proxy_network_name" &>/dev/null || true
+        exit 1
+    fi
+
+    PROXY_NETWORK="$proxy_network_name"
+    PROXY_CONTAINER="$proxy_container_name"
+    PROXY_IP="$proxy_ip"
+    trap cleanup_proxy EXIT
+
+    log_info "Proxy running at ${proxy_ip}:8888"
+}
+
+# --- Proxy CLI subcommands ---
+
+proxy_cmd_allow() {
+    local domain="$1"
+    if [[ -z "$domain" ]]; then
+        log_error "Usage: agentbox proxy allow <domain>"
+        exit 1
+    fi
+
+    local container_name
+    container_name=$(get_container_name)
+    ensure_proxy_allowlist "$container_name"
+
+    local escaped
+    escaped=$(printf '%s' "$domain" | sed 's/\./\\./g')
+    local pattern="^${escaped}\$"
+
+    local allowlist_path
+    allowlist_path=$(get_proxy_allowlist_path "$container_name")
+
+    if grep -v '^#' "$allowlist_path" 2>/dev/null | grep -qF "$pattern"; then
+        log_info "${domain} is already in the allowlist"
+        return 0
+    fi
+
+    echo "$pattern" >> "$allowlist_path"
+    log_success "Added ${domain} to allowlist"
+}
+
+proxy_cmd_block() {
+    local domain="$1"
+    if [[ -z "$domain" ]]; then
+        log_error "Usage: agentbox proxy block <domain>"
+        exit 1
+    fi
+
+    local container_name
+    container_name=$(get_container_name)
+    ensure_proxy_allowlist "$container_name"
+    local allowlist_path
+    allowlist_path=$(get_proxy_allowlist_path "$container_name")
+
+    local escaped
+    escaped=$(printf '%s' "$domain" | sed 's/\./\\./g')
+    local pattern="^${escaped}\$"
+
+    if ! grep -qF "$pattern" "$allowlist_path" 2>/dev/null; then
+        log_warning "${domain} not found in allowlist"
+        return 0
+    fi
+
+    local tmp="${allowlist_path}.tmp"
+    grep -vF "$pattern" "$allowlist_path" > "$tmp"
+    mv "$tmp" "$allowlist_path"
+    log_success "Removed ${domain} from allowlist"
+}
+
+proxy_cmd_list() {
+    local container_name
+    container_name=$(get_container_name)
+    ensure_proxy_allowlist "$container_name"
+    local allowlist_path
+    allowlist_path=$(get_proxy_allowlist_path "$container_name")
+
+    grep -v '^#' "$allowlist_path" | grep -v '^$' | sed 's/^\^//;s/\$$//;s/\\\././g'
+}
+
+proxy_cmd_log() {
+    local proxy_container_name
+    proxy_container_name=$(get_proxy_container_name)
+
+    if ! $RUNTIME inspect "$proxy_container_name" &>/dev/null; then
+        log_error "Proxy container is not running"
+        exit 1
+    fi
+
+    if [[ "${1:-}" == "-f" ]]; then
+        $RUNTIME exec "$proxy_container_name" tail -f /home/tinyproxy/tinyproxy.log
+    else
+        $RUNTIME exec "$proxy_container_name" cat /home/tinyproxy/tinyproxy.log
+    fi
+}
+
+proxy_cmd_blocked() {
+    local proxy_container_name
+    proxy_container_name=$(get_proxy_container_name)
+
+    if ! $RUNTIME inspect "$proxy_container_name" &>/dev/null; then
+        log_error "Proxy container is not running"
+        exit 1
+    fi
+
+    $RUNTIME exec "$proxy_container_name" \
+        grep "refused on filtered" /home/tinyproxy/tinyproxy.log 2>/dev/null \
+        | sed 's/.*Proxying refused on filtered domain "\(.*\)".*/\1/' \
+        | sort | uniq -c | sort -rn
+}
+
+proxy_cmd_reset() {
+    local container_name
+    container_name=$(get_container_name)
+    local allowlist_path
+    allowlist_path=$(get_proxy_allowlist_path "$container_name")
+
+    cp "${PROXY_DIR}/allowlist.txt" "$allowlist_path"
+    log_success "Allowlist reset to defaults"
+}
+
+cmd_proxy() {
+    local subcmd="${1:-help}"
+    shift || true
+
+    case "$subcmd" in
+        allow)
+            proxy_cmd_allow "${1:-}"
+            ;;
+        block)
+            proxy_cmd_block "${1:-}"
+            ;;
+        list)
+            proxy_cmd_list
+            ;;
+        log)
+            proxy_cmd_log "${1:-}"
+            ;;
+        blocked)
+            proxy_cmd_blocked
+            ;;
+        reset)
+            proxy_cmd_reset
+            ;;
+        help|*)
+            cat << PROXYEOF
+Proxy management commands:
+
+    agentbox proxy allow <domain>     Add domain to allowlist
+    agentbox proxy block <domain>     Remove domain from allowlist
+    agentbox proxy list               Show allowed domains
+    agentbox proxy log [-f]           Show proxy log (use -f to follow)
+    agentbox proxy blocked            Show blocked domains with hit counts
+    agentbox proxy reset              Reset allowlist to defaults
+PROXYEOF
+            ;;
+    esac
+}
+
 # Run container with --rm (ephemeral)
 run_container() {
     local container_name="$1"
     local -n extra_dirs_to_mount=$2
     local tool="$3"
     local ignore_dot_env="$4"
-    shift 4
+    local enable_proxy="$5"
+    shift 5
 
     # Check if first arg is "shell" mode
     local shell_mode=false
@@ -424,11 +764,27 @@ run_container() {
         runtime_args+=(--userns=keep-id)
     fi
 
+    # Set up proxy if enabled
+    local proxy_args=()
+    if [[ "$enable_proxy" == "true" ]]; then
+        start_proxy "$container_name"
+        local proxy_url="http://${PROXY_IP}:8888"
+        proxy_args+=(
+            --network "$PROXY_NETWORK"
+            --env "HTTP_PROXY=${proxy_url}"
+            --env "HTTPS_PROXY=${proxy_url}"
+            --env "http_proxy=${proxy_url}"
+            --env "https_proxy=${proxy_url}"
+        )
+        log_info "Proxy enabled: outbound traffic restricted to allowlisted domains"
+    fi
+
     # Run ephemeral container with --rm
     $RUNTIME run -it --rm \
         --name "$container_name" \
         --hostname "agentbox-$PROJECT_NAME" \
         "${runtime_args[@]}" \
+        "${proxy_args[@]}" \
         "${port_args[@]}" \
         "${mount_opts[@]}" \
         "${env_file_args[@]}" \
@@ -453,10 +809,12 @@ Options:
     --rebuild               Force rebuild of the image
     --add-dir DIR           Mount additional directory (can be used multiple times)
     --ignore-dot-env        Do not load .env files as environment variables (still mounted)
+    --proxy                 Enable proxy to restrict outbound traffic to allowlisted domains
 
 Commands:
     shell [--admin]         Start interactive shell instead of Claude CLI
     ssh-init                Initialize SSH directory for AgentBox
+    proxy <subcommand>      Manage proxy allowlist (run 'agentbox proxy help' for details)
 
     If no command is provided, Claude CLI will be started automatically.
     Use 'shell' command to get a shell instead of Claude CLI.
@@ -468,12 +826,15 @@ Examples:
     agentbox --tool opencode            # Start OpenCode instead of Claude
     agentbox -p 3002                    # Forward port 3002
     agentbox -p 3002:8080               # Map host port 3002 to container port 8080
+    agentbox --proxy                    # Enable proxy with domain allowlist
     agentbox shell                      # Start interactive shell instead of Claude
     agentbox shell --admin              # Start admin shell with sudo access
     agentbox --add-dir ~/1 --add-dir ~/2  # Add dirs with Claude CLI
     agentbox python script.py           # Run Python script in container
     agentbox --rebuild                  # Force rebuild image
     agentbox ssh-init                   # Set up SSH for AgentBox
+    agentbox proxy list                 # Show allowed domains
+    agentbox proxy allow example.com    # Add domain to allowlist
     AGENTBOX_TOOL=opencode agentbox     # Use env var to select tool
 
 Containers are ephemeral and automatically removed when you exit.
@@ -532,6 +893,7 @@ main() {
     local extra_dirs=()
     local tool="${AGENTBOX_TOOL:-claude}"
     local ignore_dot_env=false
+    local enable_proxy=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -573,6 +935,16 @@ main() {
             --ignore-dot-env)
                 ignore_dot_env=true
                 shift
+                ;;
+            --proxy)
+                enable_proxy=true
+                shift
+                ;;
+            proxy)
+                shift
+                RUNTIME=$(check_runtime)
+                cmd_proxy "$@"
+                exit 0
                 ;;
             shell)
                 shell_mode=true
@@ -643,12 +1015,12 @@ main() {
     # Run or attach to container
     if [[ "$shell_mode" == "true" ]]; then
         if [[ "$admin_mode" == "true" ]]; then
-            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "shell" "--admin" "${cmd_args[@]}"
+            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$enable_proxy" "shell" "--admin" "${cmd_args[@]}"
         else
-            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "shell" "${cmd_args[@]}"
+            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$enable_proxy" "shell" "${cmd_args[@]}"
         fi
     else
-        run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "${cmd_args[@]}"
+        run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$enable_proxy" "${cmd_args[@]}"
     fi
 }
 
