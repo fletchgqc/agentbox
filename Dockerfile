@@ -1,6 +1,15 @@
 # AgentBox - Simplified multi-language development environment for Claude
 FROM debian:trixie
 
+# Optional Java toolchain (default: on for compatibility)
+ARG INCLUDE_JAVA=true
+
+# Claude Code channel (stable or latest)
+ARG CC_CHANNEL=stable
+
+# Include OpenCode (default: on)
+ARG INCLUDE_OPENCODE=true
+
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=en_US.UTF-8
@@ -33,8 +42,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         # Python build dependencies
         python3-dev python3-pip python3-venv \
         libssl-dev libffi-dev \
-        # Java dependencies
-        default-jdk maven gradle \
+        # Java dependencies (conditional)
+        $(if [ "$INCLUDE_JAVA" = "true" ]; then echo "default-jdk maven gradle"; fi) \
         # Search tools
         ripgrep fd-find && \
     # Setup locale
@@ -111,13 +120,15 @@ RUN bash -c "source $NVM_DIR/nvm.sh && \
         yarn \
         pnpm"
 
-# Install SDKMAN for Java toolchain management
-RUN curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
-    echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
-    echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc && \
-    bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
-        sdk install java 21.0.9-tem && \
-        sdk install gradle"
+# Install SDKMAN for Java toolchain management (conditional)
+RUN if [ "$INCLUDE_JAVA" = "true" ]; then \
+        curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
+        echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
+        echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc && \
+        bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
+            sdk install java 21.0.9-tem && \
+            sdk install gradle"; \
+    fi
 
 # Setup Python tools
 RUN /home/${USERNAME}/.local/bin/uv tool install black && \
@@ -201,11 +212,13 @@ USER ${USERNAME}
 # Dockerfile hasn't changed. This ensures fresh installs on explicit rebuilds instead
 # of relying on unpredictable auto-update timing.
 ARG BUILD_TIMESTAMP=unknown
-RUN curl -fsSL https://claude.ai/install.sh | bash -s stable && \
+RUN curl -fsSL https://claude.ai/install.sh | bash -s ${CC_CHANNEL} && \
     zsh -i -c 'which claude && claude --version'
 
-RUN curl -fsSL https://opencode.ai/install | bash && \
-    zsh -i -c 'which opencode && opencode --version'
+RUN if [ "$INCLUDE_OPENCODE" = "true" ]; then \
+        curl -fsSL https://opencode.ai/install | bash && \
+        zsh -i -c 'which opencode && opencode --version'; \
+    fi
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
