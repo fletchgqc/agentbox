@@ -695,6 +695,11 @@ main() {
         exit 1
     fi
 
+    # Auto-enable OpenCode if tool is set to opencode
+    if [[ "$tool" == "opencode" ]]; then
+        include_opencode=true
+    fi
+
     # Check runtime
     RUNTIME=$(check_runtime)
     log_info "Using container runtime: $RUNTIME"
