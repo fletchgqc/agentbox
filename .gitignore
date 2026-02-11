@@ -27,3 +27,6 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# User config (keep config.example as template)
+/config

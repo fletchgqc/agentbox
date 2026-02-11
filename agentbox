@@ -129,6 +129,9 @@ build_image() {
         --build-arg GROUP_ID="${group_id}" \
         --build-arg USERNAME="agent" \
         --build-arg BUILD_TIMESTAMP=${build_timestamp} \
+        --build-arg INCLUDE_JAVA="${include_java}" \
+        --build-arg INCLUDE_OPENCODE="${include_opencode}" \
+        --build-arg CC_CHANNEL="${cc_channel}" \
         --label "agentbox.hash=${combined_hash}" \
         --label "agentbox.version=1.0.0" \
         --label "agentbox.built=${build_timestamp}" \
@@ -498,6 +501,9 @@ Options:
     --add-dir DIR               Mount additional directory (can be used multiple times)
     --ignore-dot-env            Do not load .env files as environment variables (still mounted)
     --dangerously-mount-docker  Mount Docker socket (requires Docker Desktop)
+    --no-java                   Exclude Java toolchain for smaller image (default: included)
+    --no-opencode               Exclude OpenCode installation for smaller image (default: included)
+    --cc-latest                 Use Claude Code latest channel instead of stable (may be ahead of stable)
 
 Commands:
     shell [--admin]             Start interactive shell instead of Claude CLI
@@ -507,6 +513,11 @@ Commands:
     Use 'shell' command to get a shell instead of Claude CLI.
     Use 'shell --admin' to get a shell with sudo privileges.
     Other commands will be executed inside the container.
+
+Configuration:
+    Config file: ~/.agentbox/config
+    CLI flags override config file settings.
+    See config.example for all available options.
 
 Examples:
     agentbox                              # Start Claude CLI for current project
@@ -570,8 +581,20 @@ ssh_setup() {
     log_info "AgentBox will use this directory for all SSH operations."
 }
 
+# Load config file if exists
+load_config() {
+    local config_file="${HOME}/.agentbox/config"
+    if [[ -f "$config_file" ]]; then
+        # Source the config file, allowing it to override defaults
+        source "$config_file"
+    fi
+}
+
 # Main execution
 main() {
+    # Load config file first (before CLI args, so CLI args can override)
+    load_config
+
     # Parse arguments
     local force_rebuild=false
     local shell_mode=false
@@ -581,7 +604,10 @@ main() {
     declare -a ports=()
     local extra_dirs=()
     local tool="${AGENTBOX_TOOL:-claude}"
-    local ignore_dot_env=false
+    local ignore_dot_env="${AGENTBOX_IGNORE_DOT_ENV:-false}"
+    local include_java="${AGENTBOX_INCLUDE_JAVA:-true}"
+    local include_opencode="${AGENTBOX_INCLUDE_OPENCODE:-true}"
+    local cc_channel="${AGENTBOX_CC_CHANNEL:-stable}"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -626,6 +652,18 @@ main() {
                 ;;
             --ignore-dot-env)
                 ignore_dot_env=true
+                shift
+                ;;
+            --no-java)
+                include_java=false
+                shift
+                ;;
+            --no-opencode)
+                include_opencode=false
+                shift
+                ;;
+            --cc-latest)
+                cc_channel=latest
                 shift
                 ;;
             shell)
