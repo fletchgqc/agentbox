@@ -2,8 +2,8 @@
 # AgentBox configuration
 # Copy this file to ~/.agentbox/config to customize defaults
 
-# Tool selection: claude (default) or opencode
-# AGENTBOX_TOOL=claude
+# Tool selection: claude (default), opencode, or pi
+# AGENTBOX_TOOL=pi
 
 # Include Java toolchain (JDK, Maven, Gradle) - default: true
 # AGENTBOX_INCLUDE_JAVA=false

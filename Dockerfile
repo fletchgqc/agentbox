@@ -10,6 +10,9 @@ ARG AGENTBOX_CC_CHANNEL=stable
 # Include OpenCode (default: on)
 ARG AGENTBOX_INCLUDE_OPENCODE=true
 
+# Include Pi (default: off)
+ARG AGENTBOX_INCLUDE_PI=false
+
 # Simple traditional Unix-style prompt (default: off for backwards compatibility)
 ARG AGENTBOX_SIMPLE_PROMPT=false
 
@@ -226,6 +229,11 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s ${AGENTBOX_CC_CHANNEL} && 
 RUN if [ "$AGENTBOX_INCLUDE_OPENCODE" = "true" ]; then \
         curl -fsSL https://opencode.ai/install | bash && \
         zsh -i -c 'which opencode && opencode --version'; \
+    fi
+
+RUN if [ "$AGENTBOX_INCLUDE_PI" = "true" ]; then \
+        npm install -g @mariozechner/pi-coding-agent && \
+        zsh -i -c 'which pi && pi --version'; \
     fi
 
 # Entrypoint

@@ -38,6 +38,7 @@ No configuration needed - just install either runtime.
 
 - claude code: built-in
 - opencode: built-in
+- pi: built-in (opt-in via AGENTBOX_TOOL=pi)
 - any other agents (copilot CLI, Aider, Cursor CLI...): easily add it yourself using the prompt at [docs/prompts/add-tool.md](docs/prompts/add-tool.md).
 
 ### Adding tools
@@ -55,6 +56,9 @@ agentbox
 
 # Use OpenCode instead of Claude
 agentbox --tool opencode
+
+# Use Pi instead of Claude (requires AGENTBOX_TOOL=pi in config first)
+agentbox --tool pi
 
 # Or set via environment variable
 AGENTBOX_TOOL=opencode agentbox
@@ -96,6 +100,7 @@ Persistent data (survives container removal):
   History: ~/.agentbox/projects/agentbox-<hash>/history/
   Claude: ~/.claude
   OpenCode: ~/.config/opencode and ~/.local/share/opencode
+  Pi: ~/.pi
 ```
 
 ## Languages and Tools
@@ -184,12 +189,15 @@ Zsh history is preserved in `~/.agentbox/projects/<container-name>/history`
 
 Both tools use bind mounts to share authentication across all AgentBox projects:
 
-**Claude CLI**:
+**Claude**:
 - `~/.claude` mounted at `/home/agent/.claude`
 
 **OpenCode**:
 - Config: `~/.config/opencode` mounted at `/home/agent/.config/opencode`
 - Auth: `~/.local/share/opencode` mounted at `/home/agent/.local/share/opencode`
+
+**Pi**:
+- `~/.pi` mounted at `/home/agent/.pi`
 
 ## Advanced Usage
 
