@@ -123,9 +123,10 @@ build_image() {
         --build-arg GROUP_ID="${group_id}" \
         --build-arg USERNAME="agent" \
         --build-arg BUILD_TIMESTAMP=${build_timestamp} \
-        --build-arg INCLUDE_JAVA="${include_java}" \
-        --build-arg INCLUDE_OPENCODE="${include_opencode}" \
-        --build-arg CC_CHANNEL="${cc_channel}" \
+        --build-arg AGENTBOX_INCLUDE_JAVA="${include_java}" \
+        --build-arg AGENTBOX_INCLUDE_OPENCODE="${include_opencode}" \
+        --build-arg AGENTBOX_CC_CHANNEL="${cc_channel}" \
+        --build-arg AGENTBOX_SIMPLE_PROMPT="${simple_prompt}" \
         --label "agentbox.hash=${combined_hash}" \
         --label "agentbox.version=1.0.0" \
         --label "agentbox.built=${build_timestamp}" \
@@ -579,6 +580,7 @@ main() {
     local include_java="${AGENTBOX_INCLUDE_JAVA:-true}"
     local include_opencode="${AGENTBOX_INCLUDE_OPENCODE:-true}"
     local cc_channel="${AGENTBOX_CC_CHANNEL:-stable}"
+    local simple_prompt="${AGENTBOX_SIMPLE_PROMPT:-false}"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
