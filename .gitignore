@@ -30,3 +30,9 @@ Thumbs.db
 
 # User config (keep config.example as template)
 /config
+
+# AgentBox project directories
+projects/
+
+# Local agent documentation
+.agents/
