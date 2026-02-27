@@ -628,7 +628,7 @@ main() {
             --tool)
                 shift
                 if [[ -z "${1:-}" ]]; then
-                    log_error "--tool requires a value (claude or opencode)"
+                    log_error "--tool requires a value (claude, opencode, or pi)"
                     exit 1
                 fi
                 tool="$1"
