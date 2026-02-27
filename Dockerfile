@@ -228,7 +228,7 @@ RUN export NVM_DIR="/home/agent/.nvm" && \
     if [ "$AGENTBOX_CC_CHANNEL" = "latest" ]; then \
         npm install -g @anthropic-ai/claude-code@latest; \
     else \
-        npm install -g @anthropic-ai/claude-code; \
+        npm install -g @anthropic-ai/claude-code@stable; \
     fi && \
     zsh -i -c 'which claude && claude --version'
 
