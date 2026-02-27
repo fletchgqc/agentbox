@@ -70,7 +70,7 @@ if [ -t 0 ] && [ -t 1 ]; then
     if [ "$TOOL" = "opencode" ]; then
         echo "🤖 OpenCode: $(opencode --version 2>/dev/null || echo 'not found - check installation')"
     elif [ "$TOOL" = "pi" ]; then
-        echo "🏖️  Pi: $(pi --version 2>/dev/null || echo 'not found - check installation')"
+        echo "🤖 Pi: $(pi --version 2>/dev/null || echo 'not found - check installation')"
     else
         echo "🤖 Claude CLI: $(claude --version 2>/dev/null || echo 'not found - check installation')"
     fi
