@@ -223,7 +223,13 @@ USER ${USERNAME}
 # Dockerfile hasn't changed. This ensures fresh installs on explicit rebuilds instead
 # of relying on unpredictable auto-update timing.
 ARG BUILD_TIMESTAMP=unknown
-RUN curl -fsSL https://claude.ai/install.sh | bash -s ${AGENTBOX_CC_CHANNEL} && \
+RUN export NVM_DIR="/home/agent/.nvm" && \
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
+    if [ "$AGENTBOX_CC_CHANNEL" = "latest" ]; then \
+        npm install -g @anthropic-ai/claude-code@latest; \
+    else \
+        npm install -g @anthropic-ai/claude-code; \
+    fi && \
     zsh -i -c 'which claude && claude --version'
 
 RUN if [ "$AGENTBOX_INCLUDE_OPENCODE" = "true" ]; then \
