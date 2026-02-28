@@ -113,6 +113,7 @@ The unified container image includes:
 - **Shell**: Zsh (default) and Bash with common utilities
 - **Claude CLI**: Pre-installed with per-project authentication
 - **OpenCode**: Pre-installed as an alternative AI coding tool
+- **Pi**: Pre-installed (opt-in via `--tool pi` or config)
 
 ## Authenticating to Git or other SCC Providers
 
