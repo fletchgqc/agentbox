@@ -4,17 +4,10 @@ set -e
 
 export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
 
-if [ -n "${HOST_HOME:-}" ] && [ "$HOST_HOME" != "$HOME" ]; then
-    host_home_parent=$(dirname "$HOST_HOME")
-
-    if [ ! -d "$host_home_parent" ]; then
-        sudo mkdir -p "$host_home_parent" 2>/dev/null || true
-    fi
-
-    if [ -d "$host_home_parent" ] && [ ! -e "$HOST_HOME" ]; then
-        sudo ln -s "$HOME" "$HOST_HOME" 2>/dev/null && \
-            echo "✅ Symlinked $HOST_HOME -> $HOME for plugin path resolution"
-    fi
+if [ -n "${HOST_HOME:-}" ] && [ "$HOST_HOME" != "$HOME" ] && [ ! -e "$HOST_HOME/.claude" ]; then
+    sudo mkdir -p "$HOST_HOME" 2>/dev/null || true
+    sudo ln -s "$HOME/.claude" "$HOST_HOME/.claude" 2>/dev/null && \
+        echo "✅ Symlinked $HOST_HOME/.claude -> $HOME/.claude for plugin path resolution"
 fi
 
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
