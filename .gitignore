@@ -20,6 +20,9 @@ Thumbs.db
 # Docker
 .dockerignore.local
 
+# Worktrees
+.worktrees/
+
 # Logs
 *.log
 

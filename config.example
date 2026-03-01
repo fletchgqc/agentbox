@@ -1,0 +1,21 @@
+#!/bin/bash
+# AgentBox configuration
+# Copy this file to ~/.agentbox/config to customize defaults
+
+# Tool selection: claude (default), opencode, or pi
+# AGENTBOX_TOOL=pi
+
+# Include Java toolchain (JDK, Maven, Gradle) - default: true
+# AGENTBOX_INCLUDE_JAVA=false
+
+# Include OpenCode - default: true
+# AGENTBOX_INCLUDE_OPENCODE=false
+
+# Claude Code channel: stable or latest - default: stable
+# AGENTBOX_CC_CHANNEL=latest
+
+# Simple traditional Unix-style prompt (user@host:~) - default: false
+# AGENTBOX_SIMPLE_PROMPT=true
+
+# Ignore .env files - default: false
+# AGENTBOX_IGNORE_DOT_ENV=true

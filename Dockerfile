@@ -1,6 +1,21 @@
 # AgentBox - Simplified multi-language development environment for Claude
 FROM debian:trixie
 
+# Optional Java toolchain (default: on for compatibility)
+ARG AGENTBOX_INCLUDE_JAVA=true
+
+# Claude Code channel (stable or latest)
+ARG AGENTBOX_CC_CHANNEL=stable
+
+# Include OpenCode (default: on)
+ARG AGENTBOX_INCLUDE_OPENCODE=true
+
+# Include Pi (default: off)
+ARG AGENTBOX_INCLUDE_PI=false
+
+# Simple traditional Unix-style prompt (default: off for backwards compatibility)
+ARG AGENTBOX_SIMPLE_PROMPT=false
+
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LANG=en_US.UTF-8
@@ -33,8 +48,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         # Python build dependencies
         python3-dev python3-pip python3-venv \
         libssl-dev libffi-dev \
-        # Java dependencies
-        default-jdk maven gradle \
+        # Java dependencies (conditional)
+        $(if [ "$AGENTBOX_INCLUDE_JAVA" = "true" ]; then echo "default-jdk maven gradle"; fi) \
         # Search tools
         ripgrep fd-find && \
     # Setup locale
@@ -123,13 +138,15 @@ RUN bash -c "source $NVM_DIR/nvm.sh && \
         yarn \
         pnpm"
 
-# Install SDKMAN for Java toolchain management
-RUN curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
-    echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
-    echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc && \
-    bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
-        sdk install java 21.0.9-tem && \
-        sdk install gradle"
+# Install SDKMAN for Java toolchain management (conditional)
+RUN if [ "$AGENTBOX_INCLUDE_JAVA" = "true" ]; then \
+        curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
+        echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
+        echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc && \
+        bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
+            sdk install java 21.0.9-tem && \
+            sdk install gradle"; \
+    fi
 
 # Setup Python tools
 RUN /home/${USERNAME}/.local/bin/uv tool install black && \
@@ -165,6 +182,11 @@ if [[ -n "$PS1" ]] && command -v stty >/dev/null; then
   _update_size
 fi
 EOF
+
+# Simple traditional Unix-style prompt (opt-in: AGENTBOX_SIMPLE_PROMPT=true)
+RUN if [ "$AGENTBOX_SIMPLE_PROMPT" = "true" ]; then \
+    echo 'PROMPT='"'"'%n@%m:%~ $ '"'"'' >> ~/.zshrc; \
+    fi
 
 # Configure git
 RUN git config --global init.defaultBranch main && \
@@ -213,11 +235,20 @@ USER ${USERNAME}
 # Dockerfile hasn't changed. This ensures fresh installs on explicit rebuilds instead
 # of relying on unpredictable auto-update timing.
 ARG BUILD_TIMESTAMP=unknown
-RUN curl -fsSL https://claude.ai/install.sh | bash -s stable && \
+RUN curl -fsSL https://claude.ai/install.sh | bash -s ${AGENTBOX_CC_CHANNEL} && \
     zsh -i -c 'which claude && claude --version'
 
-RUN curl -fsSL https://opencode.ai/install | bash && \
-    zsh -i -c 'which opencode && opencode --version'
+RUN if [ "$AGENTBOX_INCLUDE_OPENCODE" = "true" ]; then \
+        curl -fsSL https://opencode.ai/install | bash && \
+        zsh -i -c 'which opencode && opencode --version'; \
+    fi
+
+RUN if [ "$AGENTBOX_INCLUDE_PI" = "true" ]; then \
+        export NVM_DIR="/home/agent/.nvm" && \
+        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
+        npm install -g @mariozechner/pi-coding-agent && \
+        zsh -i -c 'which pi && pi --version'; \
+    fi
 
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -129,6 +129,11 @@ build_image() {
         --build-arg GROUP_ID="${group_id}" \
         --build-arg USERNAME="agent" \
         --build-arg BUILD_TIMESTAMP=${build_timestamp} \
+        --build-arg AGENTBOX_INCLUDE_JAVA="${include_java}" \
+        --build-arg AGENTBOX_INCLUDE_OPENCODE="${include_opencode}" \
+        --build-arg AGENTBOX_INCLUDE_PI="${include_pi}" \
+        --build-arg AGENTBOX_CC_CHANNEL="${cc_channel}" \
+        --build-arg AGENTBOX_SIMPLE_PROMPT="${simple_prompt}" \
         --label "agentbox.hash=${combined_hash}" \
         --label "agentbox.version=1.0.0" \
         --label "agentbox.built=${build_timestamp}" \
@@ -358,6 +363,16 @@ run_container() {
         )
 
         log_info "OpenCode configuration and auth mounted"
+    elif [[ "$tool" == "pi" ]]; then
+        local pi_dir="${HOME}/.pi"
+
+        mkdir -p "$pi_dir"
+
+        mount_opts+=(
+            -v "${pi_dir}:/home/agent/.pi"
+        )
+
+        log_info "Pi configuration mounted"
     else
         local claude_dir="${HOME}/.claude"
 
@@ -396,6 +411,8 @@ run_container() {
         local tool_cmd
         if [[ "$tool" == "opencode" ]]; then
             tool_cmd="opencode"
+        elif [[ "$tool" == "pi" ]]; then
+            tool_cmd="pi"
         else
             tool_cmd="claude --dangerously-skip-permissions"
         fi
@@ -492,12 +509,15 @@ Usage:
 
 Options:
     -h, --help                  Show this help message
-    --tool TOOL                 Choose tool: claude (default) or opencode
+    --tool TOOL                 Choose tool: claude (default), opencode, or pi
     -p PORT                     Forward a port from host to container (can be used multiple times)
     --rebuild                   Force rebuild of the image
     --add-dir DIR               Mount additional directory (can be used multiple times)
     --ignore-dot-env            Do not load .env files as environment variables (still mounted)
     --dangerously-mount-docker  Mount Docker socket (requires Docker Desktop)
+    --no-java                   Exclude Java toolchain for smaller image (default: included)
+    --no-opencode               Exclude OpenCode installation for smaller image (default: included)
+    --cc-latest                 Use Claude Code latest channel instead of stable (may be ahead of stable)
 
 Commands:
     shell [--admin]             Start interactive shell instead of Claude CLI
@@ -508,9 +528,15 @@ Commands:
     Use 'shell --admin' to get a shell with sudo privileges.
     Other commands will be executed inside the container.
 
+Configuration:
+    Config file: ~/.agentbox/config
+    CLI flags override config file settings.
+    See config.example for all available options.
+
 Examples:
     agentbox                              # Start Claude CLI for current project
     agentbox --tool opencode              # Start OpenCode instead of Claude
+    agentbox --tool pi                   # Start Pi instead of Claude
     agentbox -p 3002                      # Forward port 3002
     agentbox -p 3002:8080                 # Map host port 3002 to container port 8080
     agentbox shell                        # Start interactive shell instead of Claude
@@ -570,8 +596,20 @@ ssh_setup() {
     log_info "AgentBox will use this directory for all SSH operations."
 }
 
+# Load config file if exists
+load_config() {
+    local config_file="${HOME}/.agentbox/config"
+    if [[ -f "$config_file" ]]; then
+        # Source the config file, allowing it to override defaults
+        source "$config_file"
+    fi
+}
+
 # Main execution
 main() {
+    # Load config file first (before CLI args, so CLI args can override)
+    load_config
+
     # Parse arguments
     local force_rebuild=false
     local shell_mode=false
@@ -581,7 +619,12 @@ main() {
     declare -a ports=()
     local extra_dirs=()
     local tool="${AGENTBOX_TOOL:-claude}"
-    local ignore_dot_env=false
+    local ignore_dot_env="${AGENTBOX_IGNORE_DOT_ENV:-false}"
+    local include_java="${AGENTBOX_INCLUDE_JAVA:-true}"
+    local include_opencode="${AGENTBOX_INCLUDE_OPENCODE:-true}"
+    local include_pi="${AGENTBOX_INCLUDE_PI:-false}"
+    local cc_channel="${AGENTBOX_CC_CHANNEL:-stable}"
+    local simple_prompt="${AGENTBOX_SIMPLE_PROMPT:-false}"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -618,7 +661,7 @@ main() {
             --tool)
                 shift
                 if [[ -z "${1:-}" ]]; then
-                    log_error "--tool requires a value (claude or opencode)"
+                    log_error "--tool requires a value (claude, opencode, or pi)"
                     exit 1
                 fi
                 tool="$1"
@@ -626,6 +669,18 @@ main() {
                 ;;
             --ignore-dot-env)
                 ignore_dot_env=true
+                shift
+                ;;
+            --no-java)
+                include_java=false
+                shift
+                ;;
+            --no-opencode)
+                include_opencode=false
+                shift
+                ;;
+            --cc-latest)
+                cc_channel=latest
                 shift
                 ;;
             shell)
@@ -652,9 +707,19 @@ main() {
     done
 
     # Validate tool selection
-    if [[ "$tool" != "claude" && "$tool" != "opencode" ]]; then
-        log_error "Invalid tool: $tool (must be 'claude' or 'opencode')"
+    if [[ "$tool" != "claude" && "$tool" != "opencode" && "$tool" != "pi" ]]; then
+        log_error "Invalid tool: $tool (must be 'claude', 'opencode', or 'pi')"
         exit 1
+    fi
+
+    # Auto-enable OpenCode if tool is set to opencode
+    if [[ "$tool" == "opencode" ]]; then
+        include_opencode=true
+    fi
+
+    # Auto-enable Pi if tool is set to pi
+    if [[ "$tool" == "pi" ]]; then
+        include_pi=true
     fi
 
     # Check runtime
