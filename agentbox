@@ -45,7 +45,13 @@ log_build() { echo -e "${CYAN}🔨${NC} $1"; }
 # Detect available container runtime
 detect_runtime() {
     if command -v docker &> /dev/null && docker info &> /dev/null; then
-        echo "docker"
+        # Check if docker is actually a Podman shim - if so, use podman directly
+        # to ensure Podman-specific flags (e.g. --userns=keep-id) are applied.
+        if docker info 2>/dev/null | grep -q "podman" && command -v podman &> /dev/null; then
+            echo "podman"
+        else
+            echo "docker"
+        fi
     elif command -v podman &> /dev/null && podman info &> /dev/null; then
         echo "podman"
     else
