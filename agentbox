@@ -299,13 +299,14 @@ run_container() {
 
     # Mount cache directories for package managers
     local cache_dir="${HOME}/.cache/agentbox/${container_name}"
-    mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
+    mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle" "${cache_dir}/nuget"
 
     mount_opts+=(
         -v "${cache_dir}/npm:/home/agent/.npm"
         -v "${cache_dir}/pip:/home/agent/.cache/pip"
         -v "${cache_dir}/maven:/home/agent/.m2"
         -v "${cache_dir}/gradle:/home/agent/.gradle"
+        -v "${cache_dir}/nuget:/home/agent/.nuget/packages"
     )
 
     # Mount per-project persistent data

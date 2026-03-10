@@ -35,6 +35,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libssl-dev libffi-dev \
         # Java dependencies
         default-jdk maven gradle \
+        # ICU is required by .NET (globalization) and libunwind for stack unwinding
+        libicu-dev libunwind8 \
         # Search tools
         ripgrep fd-find && \
     # Setup locale
@@ -118,6 +120,21 @@ RUN curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
     bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
         sdk install java 21.0.9-tem && \
         sdk install gradle"
+
+# Install .NET SDKs side by side
+ENV DOTNET_ROOT="/home/${USERNAME}/.dotnet"
+ENV PATH="${DOTNET_ROOT}:${DOTNET_ROOT}/tools:${PATH}"
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
+    chmod +x /tmp/dotnet-install.sh && \
+    /tmp/dotnet-install.sh --channel 6.0 --install-dir "$DOTNET_ROOT" && \
+    /tmp/dotnet-install.sh --channel 8.0 --install-dir "$DOTNET_ROOT" && \
+    /tmp/dotnet-install.sh --channel 10.0 --install-dir "$DOTNET_ROOT" && \
+    rm /tmp/dotnet-install.sh && \
+    echo 'export DOTNET_ROOT="$HOME/.dotnet"' >> ~/.bashrc && \
+    echo 'export PATH="$DOTNET_ROOT:$DOTNET_ROOT/tools:$PATH"' >> ~/.bashrc && \
+    echo 'export DOTNET_ROOT="$HOME/.dotnet"' >> ~/.zshrc && \
+    echo 'export PATH="$DOTNET_ROOT:$DOTNET_ROOT/tools:$PATH"' >> ~/.zshrc && \
+    dotnet --list-sdks
 
 # Setup Python tools
 RUN /home/${USERNAME}/.local/bin/uv tool install black && \
