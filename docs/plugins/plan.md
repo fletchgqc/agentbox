@@ -6,50 +6,7 @@ Transform agentbox from a monolithic Dockerfile to a modular system where projec
 
 ## Implementation Phases
 
-### Phase 0: Security and Validation Layer
-
-Implement security controls before module loading system to prevent malicious module configurations.
-
-#### 0.1 Input Validation Functions
-
-**New Functions:**
-```bash
-validate_mount_path()       # Security check for mount paths
-validate_env_var()          # Security check for environment variables
-validate_module_name()      # Prevent path traversal in module names
-sanitize_path()            # Remove ../ and ensure no traversal
-```
-
-**Mount Path Security:**
-- Reject absolute paths outside user home directory
-- Reject paths containing `..` (path traversal)
-- Whitelist allowed prefixes: `~/.cache`, `~/.config`, `~/.npm`, `~/.m2`, `~/.gradle`, `~/.cargo`, `~/.rustup`, `~/.sdkman`, `~/.nvm`
-- Reject sensitive paths: `/var/run/docker.sock`, `/etc`, `/root`, `/sys`, `/proc`
-
-**Environment Variable Security:**
-- Blacklist critical variables: `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DOCKER_HOST`, `DOCKER_TLS_VERIFY`
-- Allow PATH modifications but validate no malicious prefixes
-- Sanitize values to prevent injection
-
-**Module Name Security:**
-- Reject names containing `/`, `..`, or absolute paths
-- Only allow alphanumeric, dash, underscore
-- Format: `^[a-z0-9_-]+$`
-
-#### 0.2 File Permission Checks
-
-**New Functions:**
-```bash
-check_module_readable()     # Verify module files are readable
-verify_module_integrity()   # Check all expected files present
-```
-
-**Checks:**
-- Verify `.dockerfile` exists and is readable
-- Verify `.mounts` and `.env` are readable (if present)
-- Fail early with clear error if permission denied
-
-### Phase 1: Module Infrastructure
+### Phase 1: Module Infrastructure & Security
 
 #### 1.1 Create Module Directory Structure
 
@@ -74,36 +31,112 @@ modules/
 **Tasks:**
 - Create `modules/` directory in agentbox repo
 - Define module file format specification
-- Create helper function to locate modules (search user dir, then repo dir)
-- Create module validator to check syntax
+- Document that modules install tools as `agent` user in `/home/agent/`
 
-#### 1.2 Module Loading System
+#### 1.2 Module Loading & Validation System
 
-Create bash functions to:
-- Search for modules in precedence order (`~/.agentbox/modules/`, `<repo>/modules/`)
-- Parse module files (`.dockerfile`, `.mounts`, `.env`)
-- Validate module existence and completeness
-- Generate helpful error messages for missing modules
+Create bash functions with integrated security validation:
 
-**New Functions (in `agentbox` script):**
+**New Functions:**
 ```bash
-find_module()           # Locate module file by name:version
-validate_module()       # Check module files exist, are readable, and pass security checks
-load_module_dockerfile() # Return Dockerfile instructions
-load_module_mounts()    # Return mount specifications (after security validation)
-load_module_env()       # Return environment variables (after security validation)
-list_available_versions() # For error messages
+# Module discovery
+find_module()              # Locate module by name:version
+list_available_versions()  # For error messages
+
+# Security validation
+validate_module_name()     # Prevent path traversal (^[a-z0-9_-]+$)
+validate_module_directory() # Reject symlinks outside ~/.agentbox/
+validate_mount_path()      # Whitelist home prefixes, reject sensitive paths
+validate_env_var()         # Blacklist LD_PRELOAD, DOCKER_HOST, etc.
+
+# Module loading (includes validation)
+load_module()              # Load and validate all module files
+load_module_dockerfile()   # Return Dockerfile instructions
+load_module_mounts()       # Return validated mount specifications
+load_module_env()          # Return validated environment variables
+
+# Error handling
+show_module_error()        # Display helpful error with available versions
 ```
 
-**Security Integration:**
-- `find_module()` calls `validate_module_name()` before searching
-- `validate_module()` calls `check_module_readable()` and `verify_module_integrity()`
-- `load_module_mounts()` validates each mount path with `validate_mount_path()`
-- `load_module_env()` validates each variable with `validate_env_var()`
+**Module Name Security:**
+- Format: `^[a-z0-9_-]+$` (lowercase only for consistency)
+- Reject: `/`, `..`, absolute paths
+- Case-insensitive lookup (convert to lowercase)
+
+**Module Directory Security:**
+- Verify module directories are not symlinks
+- If symlink, verify target is within `~/.agentbox/` or agentbox repo
+- Reject symlinks to system directories
+
+**Mount Path Security:**
+- Expand `~` to `$HOME` before validation
+- Whitelist: `~/.cache/`, `~/.config/`, `~/.npm/`, `~/.m2/`, `~/.gradle/`, `~/.cargo/`, `~/.rustup/`, `~/.sdkman/`, `~/.nvm/`
+- Blacklist: `/var/run/docker.sock`, `/etc/`, `/sys/`, `/proc/`, `/dev/`
+- Reject: paths with `..`, absolute paths outside home
+- Create missing directories with mode 0755
+- Fail if path exists as file (not directory)
+- Fail if directory creation fails (permissions)
+
+**Environment Variable Security:**
+- Blacklist: `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DOCKER_HOST`, `DOCKER_TLS_VERIFY`, `DOCKER_CERT_PATH`
+- Validate `PATH`: no `.` or `./` entries, no writable system paths
+- Support `$VAR` references to existing env vars
+- Variables processed in module order (later modules can reference earlier ones)
+
+**PATH Variable Merging:**
+When multiple modules define `PATH`:
+```bash
+# Module 1: nodejs
+PATH=$HOME/.nvm/versions/node/v20/bin:$PATH
+
+# Module 2: java
+PATH=$HOME/.sdkman/candidates/java/current/bin:$PATH
+
+# Result: prepend all module paths in order
+PATH=$HOME/.nvm/versions/node/v20/bin:$HOME/.sdkman/candidates/java/current/bin:$PATH
+```
+
+Logic:
+1. Parse each module's PATH value
+2. Extract the prepend portion (before `:$PATH`)
+3. Combine all prepends in module order
+4. Set final PATH with all prepends + original container PATH
+
+**File Integrity Checks:**
+- Verify `.dockerfile` exists and is readable
+- Verify `.mounts` and `.env` are readable (if present)
+- Check files are regular files (not symlinks, devices, etc.)
+- Validate file size (reject empty or >1MB files)
+- Fail early with actionable error
+
+**Error Messages:**
+```
+Error: Module not found: java:21
+
+Searched in:
+  - /home/user/.agentbox/modules/java/21.dockerfile
+  - /opt/agentbox/modules/java/21.dockerfile
+
+Available java versions:
+  - 17
+
+Error: Insecure mount path in module nodejs:20
+Path: /etc/passwd:/container/etc/passwd
+Reason: Absolute paths outside user home are not allowed
+
+Allowed prefixes: ~/.cache, ~/.config, ~/.npm, ~/.m2, ~/.gradle, ~/.cargo
+
+Error: Blocked environment variable in module custom:1
+Variable: LD_PRELOAD=/malicious/lib.so
+Reason: LD_PRELOAD is blacklisted for security
+
+Blocked variables: LD_PRELOAD, LD_LIBRARY_PATH, DOCKER_HOST, DOCKER_TLS_VERIFY
+```
 
 ### Phase 2: Configuration System
 
-#### 2.1 Config File Discovery
+#### 2.1 Config File Discovery & No-Config Fallback
 
 Implement upward search for `.agentbox` file:
 
@@ -116,26 +149,43 @@ find_agentbox_config()  # Search upward from cwd, like .git
 - Start in current directory
 - Search upward until `.agentbox` found or reach `/`
 - Return path to config file or empty if not found
+- If not found: use base image only (no modules)
 
-#### 2.2 Config File Parser
+**No-Config Behavior:**
+- Missing `.agentbox`: build image with base Dockerfile only
+- Empty `modules:` list: same as missing file
+- User can explicitly request base-only with empty modules list
 
-Parse YAML `.agentbox` configuration:
+#### 2.2 Config File Parser & Validation
+
+Parse and validate YAML `.agentbox` configuration:
 
 **New Function:**
 ```bash
-parse_agentbox_config()  # Parse YAML, extract modules list
+parse_agentbox_config()  # Parse YAML, extract and validate modules
 ```
 
-**Dependencies:**
-- Use `yq` (already in Dockerfile) for YAML parsing
-- Validate YAML syntax before parsing (prevent injection)
-- Extract module list in format `name:version`
-- Validate each module name format with `validate_module_name()`
+**Validation Steps:**
+1. Check YAML syntax (use `yq` with error handling)
+2. Verify `modules:` key exists
+3. Extract module list
+4. For each module:
+   - Validate format: `name:version` or `name`
+   - Normalize name to lowercase
+   - Validate name with `validate_module_name()`
+   - Check for duplicates
+5. Return validated module list
 
-**Security:**
-- Reject malformed YAML that could exploit parser
-- Validate module names don't contain path traversal
-- Check for duplicate modules
+**Error Handling:**
+```
+Error: Invalid .agentbox syntax
+
+File: /home/user/project/.agentbox
+Line 3: Expected 'modules:' key at root level
+
+Error: Duplicate module in .agentbox
+Module: nodejs:20 (appears 2 times)
+```
 
 ### Phase 3: Dynamic Image Building
 
@@ -143,16 +193,22 @@ parse_agentbox_config()  # Parse YAML, extract modules list
 
 Create `Dockerfile.base` containing only:
 - Linux base (Debian Trixie)
-- Essential tools (git, vim, curl, wget, etc.)
-- Build tools (gcc, make, cmake)
+- Essential tools (git, vim, curl, wget, jq, yq, etc.)
+- Build tools (gcc, make, cmake, build-essential)
 - Python (with uv)
 - Claude Code and OpenCode
-- User setup and shell configuration
+- User setup (`agent` user with sudo)
+- Shell configuration (bash, zsh)
+
+**User Context:**
+- All tools installed as/for `agent` user
+- Installation directories: `/home/agent/.nvm`, `/home/agent/.sdkman`, etc.
+- Modules continue as `USER agent` (no root escalation needed)
 
 **Tasks:**
 - Strip language-specific installations from current Dockerfile
-- Rename to `Dockerfile.base`
-- Keep current Dockerfile as fallback during transition
+- Create `Dockerfile.base`
+- Keep current Dockerfile as `Dockerfile.legacy` during transition
 
 #### 3.2 Dynamic Dockerfile Generation
 
@@ -164,62 +220,90 @@ generate_dockerfile()  # Build Dockerfile from base + modules
 ```
 
 **Logic:**
-1. Start with `Dockerfile.base`
-2. For each module in `.agentbox`:
-   - Validate module exists
-   - Append module's `.dockerfile` content
-3. Write to temporary location
+1. Start with `Dockerfile.base` content
+2. For each module in `.agentbox` (in order):
+   - Load module's `.dockerfile` content
+   - Append to combined Dockerfile
+3. Write to temporary file in `/tmp/agentbox-build-XXXXXX/`
 4. Return path to generated Dockerfile
+
+**Generated Dockerfile Structure:**
+```dockerfile
+# From Dockerfile.base
+FROM debian:trixie
+...
+USER agent
+
+# From modules/nodejs/20.dockerfile
+ENV NVM_DIR="/home/agent/.nvm"
+RUN curl -o- ... | bash
+...
+
+# From modules/java/17.dockerfile
+RUN curl -s "https://get.sdkman.io" | bash
+...
+```
 
 #### 3.3 Image Naming and Hashing
 
-Update image naming to use project path hash:
+**Image Naming:**
+Format: `agentbox:<config-hash>`
 
-**Modify Function:**
+**Hash Calculation:**
 ```bash
-get_image_name()  # Return agentbox:<project-path-hash>
+get_image_hash()  # Calculate hash of all build inputs
 ```
 
-**Logic:**
-- Hash the directory containing `.agentbox` file (project root)
-- Use first 8 characters of SHA-256 hash
-- Format: `agentbox:7a3f9c2e`
+Combine and hash:
+1. Absolute path to directory containing `.agentbox` (project root)
+2. Content of `.agentbox` config file
+3. Content of `Dockerfile.base`
+4. Content of all referenced module files (`.dockerfile`, `.mounts`, `.env`)
 
-**Note:** Hash collision risk with 8 chars is ~1 in 4 billion. Acceptable for local development use case.
+Use first 8 characters of SHA-256 hash.
+
+**Examples:**
+- `agentbox:7a3f9c2e` (project with nodejs:20, java:17)
+- `agentbox:base` (no `.agentbox` found, base-only)
+
+**Image Reuse:**
+Projects with identical configs in different directories will have different hashes (path included). This is intentional - allows projects to diverge independently.
 
 ### Phase 4: Rebuild Detection
-
-#### 4.1 Extend Rebuild Triggers
-
-Enhance `needs_rebuild()` to check:
-- Base Dockerfile modified
-- Any referenced module definition modified
-- `.agentbox` config modified
-- Target image doesn't exist
 
 **Modify Function:**
 ```bash
 needs_rebuild()
 ```
 
-**Image Label Format:**
+**Simplified Approach:**
+Store single combined hash in image label:
 ```
-agentbox.config.hash=<sha256-of-.agentbox>
-agentbox.base.hash=<sha256-of-Dockerfile.base>
-agentbox.module.<name>.<version>.hash=<sha256-of-module-files>
+agentbox.build.hash=<sha256-of-all-inputs>
 ```
 
-**Tracking Logic:**
-- Store hash of `.agentbox` config in label `agentbox.config.hash`
-- Store hash of each module's combined files in `agentbox.module.<name>.<version>.hash`
-- Store hash of base Dockerfile in `agentbox.base.hash`
-- Compare all hashes on startup; rebuild if any mismatch
+**Rebuild Triggers:**
+1. Target image doesn't exist
+2. Image has no `agentbox.build.hash` label
+3. Stored hash ≠ current hash (calculated by `get_image_hash()`)
+
+**Hash Input Changes:**
+- `.agentbox` config modified
+- `Dockerfile.base` modified
+- Any referenced module file modified
+- Project directory path changed
+
+**Concurrent Build Protection:**
+Use Docker's native locking:
+```bash
+docker build --tag "$image_name" --iidfile /tmp/build-$$.iid ...
+```
+
+If concurrent build occurs, Docker handles it. Later build wins (overwrites tag).
 
 ### Phase 5: Runtime Configuration
 
-#### 5.1 Module Mounts
-
-Integrate module-specified volume mounts:
+#### 5.1 Module Mounts Integration
 
 **Modify Function:**
 ```bash
@@ -227,17 +311,17 @@ run_container()
 ```
 
 **Logic:**
-1. Load mounts from each module's `.mounts` file
-2. Validate each mount path with `validate_mount_path()` (security)
-3. Expand `~` to `$HOME`
-4. Check if host path exists; if directory missing, attempt create
-5. Handle creation failures gracefully (permission errors)
-6. Verify host path is directory, not file
-7. Add validated mounts to mount_opts array
+1. For each module in `.agentbox` (in order):
+   - Load mounts from `.mounts` file
+   - For each mount `host:container`:
+     - Validate with `validate_mount_path()`
+     - Expand `~` to `$HOME`
+     - If host path missing: create directory (fail if creation fails)
+     - Verify host path is directory
+     - Add `-v host:container` to mount_opts
+2. Add mounts to docker run command
 
-#### 5.2 Module Environment Variables
-
-Integrate module-specified environment variables:
+#### 5.2 Module Environment Variables Integration
 
 **Modify Function:**
 ```bash
@@ -245,23 +329,34 @@ run_container()
 ```
 
 **Logic:**
-1. Load environment from each module's `.env` file
-2. Parse `VAR=value` format
-3. Validate each variable with `validate_env_var()` (security)
-4. Reject blacklisted variables (LD_PRELOAD, DOCKER_HOST, etc.)
-5. Add validated variables to `--env` flags for docker run command
+1. Initialize env_vars array
+2. For each module in `.agentbox` (in order):
+   - Load environment from `.env` file
+   - For each `VAR=value`:
+     - Validate with `validate_env_var()`
+     - If `VAR=PATH`: merge with existing PATH (prepend logic)
+     - Else: store variable
+3. Add all variables with `-e VAR=value` to docker run command
+
+**PATH Merging Example:**
+```bash
+# Module 1: nodejs
+PATH=$HOME/.nvm/versions/node/v20/bin:$PATH
+
+# Module 2: java
+PATH=$HOME/.sdkman/candidates/java/current/bin:$PATH
+
+# Generated docker run:
+-e PATH=/home/agent/.nvm/versions/node/v20/bin:/home/agent/.sdkman/candidates/java/current/bin:$PATH
+```
 
 ### Phase 6: Initial Module Set
 
-#### 6.1 Extract Language Modules from Current Dockerfile
+Extract language modules from current Dockerfile:
 
-Create initial modules from existing Dockerfile:
-
-**Modules to create:**
-
-`modules/nodejs/20.dockerfile`:
+#### nodejs/20.dockerfile
 ```dockerfile
-# Install Node.js via NVM
+# Install Node.js via NVM as agent user
 ENV NVM_DIR="/home/agent/.nvm"
 RUN NVM_VERSION=$(curl -s https://api.github.com/repos/nvm-sh/nvm/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/') && \
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash && \
@@ -269,123 +364,117 @@ RUN NVM_VERSION=$(curl -s https://api.github.com/repos/nvm-sh/nvm/releases/lates
     nvm install 20 && \
     nvm alias default 20 && \
     nvm use default && \
-    npm install -g typescript @types/node ts-node eslint prettier nodemon yarn pnpm
+    npm install -g typescript ts-node eslint prettier yarn pnpm
+
 RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
     echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc && \
     echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc && \
     echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.zshrc
 ```
 
-`modules/nodejs/20.mounts`:
+#### nodejs/20.mounts
 ```
 ~/.npm:/home/agent/.npm
 ```
 
-`modules/java/17.dockerfile`:
+#### nodejs/20.env
+```
+NVM_DIR=/home/agent/.nvm
+PATH=/home/agent/.nvm/versions/node/v20/bin:$PATH
+```
+
+#### java/17.dockerfile
 ```dockerfile
-# Install Java 17 via SDKMAN
+# Install Java 17 via SDKMAN as agent user
 RUN curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
     bash -c "source $HOME/.sdkman/bin/sdkman-init.sh && \
         sdk install java 17.0.9-tem && \
         sdk install gradle && \
-        sdk install maven" && \
-    echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
+        sdk install maven"
+
+RUN echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.bashrc && \
     echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc
 ```
 
-`modules/java/17.mounts`:
+#### java/17.mounts
 ```
 ~/.m2:/home/agent/.m2
 ~/.gradle:/home/agent/.gradle
 ```
 
-`modules/rust/dockerfile`:
+#### java/17.env
+```
+SDKMAN_DIR=/home/agent/.sdkman
+PATH=/home/agent/.sdkman/candidates/java/current/bin:/home/agent/.sdkman/candidates/gradle/current/bin:/home/agent/.sdkman/candidates/maven/current/bin:$PATH
+```
+
+#### rust/dockerfile
 ```dockerfile
-# Install Rust via rustup
+# Install Rust via rustup as agent user
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
     echo 'source "$HOME/.cargo/env"' >> ~/.bashrc && \
     echo 'source "$HOME/.cargo/env"' >> ~/.zshrc
 ```
 
-`modules/rust/mounts`:
+#### rust/mounts
 ```
 ~/.cargo:/home/agent/.cargo
+~/.rustup:/home/agent/.rustup
 ```
 
-### Phase 7: Error Handling
+#### rust/env
+```
+CARGO_HOME=/home/agent/.cargo
+RUSTUP_HOME=/home/agent/.rustup
+PATH=/home/agent/.cargo/bin:$PATH
+```
 
-#### 7.1 Missing Module Errors
+### Phase 7: Module Discovery CLI
 
-Create clear error messages:
+Add commands for users to explore available modules:
 
-**Function:**
+**New Functions:**
 ```bash
-show_module_error()  # Display helpful error for missing module
+cmd_modules_list()      # List all modules or filter by name
+cmd_modules_info()      # Show details for specific module:version
 ```
 
-**Error format:**
+**Commands:**
+```bash
+agentbox modules list              # Show all available modules
+agentbox modules list nodejs       # Show nodejs versions
+agentbox modules info nodejs:20    # Show module details
 ```
-Error: Module not found: java:21
 
-Searched in:
-  - /home/user/.agentbox/modules/java/21.dockerfile
-  - /opt/agentbox/modules/java/21.dockerfile
+**Output Examples:**
+```
+$ agentbox modules list
+Available modules:
 
-Available java versions:
+nodejs:
+  - 20
+  - 22
+
+java:
   - 17
-```
+  - 21
 
-#### 7.2 Config Validation
+rust (version managed by rustup)
 
-Validate `.agentbox` syntax before processing:
+$ agentbox modules info nodejs:20
+Module: nodejs:20
+Location: /opt/agentbox/modules/nodejs/20.dockerfile
 
-**Function:**
-```bash
-validate_config()  # Check YAML syntax, module format
-```
+Mounts:
+  ~/.npm -> /home/agent/.npm
 
-**Checks:**
-- Valid YAML syntax (prevent parser exploits)
-- `modules:` key exists
-- Module names follow `name:version` or `name` format
-- Module names pass `validate_module_name()` security check
-- No duplicate modules
-- Reject malformed structures
+Environment:
+  NVM_DIR=/home/agent/.nvm
+  PATH=/home/agent/.nvm/versions/node/v20/bin:$PATH
 
-#### 7.3 Docker Build Error Handling
-
-Improve Docker build failure messages:
-
-**Function:**
-```bash
-parse_docker_error()  # Extract actionable error from Docker output
-```
-
-**Improvements:**
-- Capture full Docker build output
-- Extract specific failure line/command from multi-stage output
-- Surface root cause, not just "build failed"
-- Suggest common fixes for known issues
-
-#### 7.4 Security Validation Errors
-
-Clear messages for security violations:
-
-**Error Examples:**
-```
-Error: Insecure mount path in module nodejs:20
-Path: /etc/passwd:/container/etc/passwd
-Reason: Absolute paths outside user home are not allowed
-
-Allowed prefixes: ~/.cache, ~/.config, ~/.npm, ~/.m2, ~/.gradle, ~/.cargo
-```
-
-```
-Error: Blocked environment variable in module custom:1
-Variable: LD_PRELOAD=/malicious/lib.so
-Reason: LD_PRELOAD is blacklisted for security
-
-Blocked variables: LD_PRELOAD, LD_LIBRARY_PATH, DOCKER_HOST, DOCKER_TLS_VERIFY
+Installs:
+  - Node.js 20 (via nvm)
+  - npm global: typescript, ts-node, eslint, prettier, yarn, pnpm
 ```
 
 ### Phase 8: Documentation
@@ -395,118 +484,136 @@ Blocked variables: LD_PRELOAD, LD_LIBRARY_PATH, DOCKER_HOST, DOCKER_TLS_VERIFY
 Add sections:
 - Module system overview
 - `.agentbox` configuration syntax
-- Creating custom modules
 - Available built-in modules
+- Creating custom modules (link to guide)
 
 #### 8.2 Module Development Guide
 
 Create `docs/plugins/module-development.md`:
-- Module file format specification
-- Best practices for writing modules
-- Security guidelines for custom modules
-- Testing modules
-- Contributing modules to agentbox
 
-**Security Documentation:**
-- Warn users that custom modules in `~/.agentbox/modules/` execute arbitrary code
-- Document mount path restrictions and allowed prefixes
-- Document environment variable blacklist
-- Explain that modules are trusted code (like installing packages)
+**Contents:**
+- Module file format specification
+- User context (`agent` user, `/home/agent/` paths)
+- PATH merging behavior
+- Security guidelines:
+  - **Warning:** Modules execute arbitrary code during build
+  - Built-in modules are trusted (maintained by agentbox)
+  - Audit custom modules like any software installation
+  - Cannot validate Dockerfile instructions (by design)
+  - Mount/env validation provides defense-in-depth only
+- Testing modules locally
+- Contributing modules to agentbox
 
 #### 8.3 Migration Guide
 
 Create `docs/plugins/migration.md`:
 - How to migrate from monolithic Dockerfile
 - Example `.agentbox` configurations
-- Troubleshooting common issues
+- Common issues (PATH not set, mounts missing, etc.)
+- How to verify module setup
 
 ## Implementation Order
 
-### Milestone 1: Security & Core Infrastructure
-- Phase 0: Security and Validation Layer (0.1, 0.2)
-- Phase 1: Module Infrastructure (1.1, 1.2)
+### Milestone 1: Core Infrastructure
+- Phase 1: Module Infrastructure & Security (1.1, 1.2)
 - Phase 2: Configuration System (2.1, 2.2)
-- Basic testing with hardcoded module
+- Test: Load module, validate security, parse config
 
 ### Milestone 2: Dynamic Building
 - Phase 3: Dynamic Image Building (3.1, 3.2, 3.3)
-- Phase 4: Rebuild Detection (4.1)
-- Test with single module
+- Phase 4: Rebuild Detection
+- Test: Build image with single module
 
 ### Milestone 3: Runtime & Modules
 - Phase 5: Runtime Configuration (5.1, 5.2)
-- Phase 6: Initial Module Set (6.1)
-- Integration testing
+- Phase 6: Initial Module Set
+- Test: Run container with nodejs:20, verify mounts and PATH
 
-### Milestone 4: Error Handling & Documentation
-- Phase 7: Error Handling (7.1, 7.2, 7.3, 7.4)
+### Milestone 4: Polish & Documentation
+- Phase 7: Module Discovery CLI
 - Phase 8: Documentation (8.1, 8.2, 8.3)
-- User acceptance testing
+- Test: User acceptance testing
 
 ## Testing Strategy
 
-### Unit Tests
-- Module file parsing
-- Config file parsing
-- Path resolution
-- Hash calculation
-- Security validation functions (mount paths, env vars, module names)
-
-### Integration Tests
-- Build image with nodejs:20 module
-- Build image with java:17 + nodejs:20
-- Build image with rust (versionless)
-- Verify mounts work correctly
-- Verify environment variables applied
-
 ### Security Tests
-- Reject malicious mount paths (`/etc/passwd`, `../../../etc`)
-- Reject path traversal in module names (`../../malicious`)
-- Reject sensitive environment variables (`LD_PRELOAD`)
-- Reject absolute paths outside home in mounts
+- Reject path traversal: `../../etc/passwd`, `../malicious`
+- Reject symlinks to system dirs
+- Reject sensitive mounts: `/var/run/docker.sock`, `/etc/`
+- Reject blacklisted env vars: `LD_PRELOAD`, `DOCKER_HOST`
+- Reject PATH with `.` or `./`
 - Handle missing file permissions gracefully
-- Verify built-in modules pass security validation
+- Verify built-in modules pass validation
+
+### Module Loading Tests
+- Load module with all files present
+- Load module with only .dockerfile
+- Reject module with missing .dockerfile
+- Reject empty .dockerfile
+- Reject oversized module file (>1MB)
+- Case-insensitive module lookup: `NodeJS:20` → `nodejs:20`
+
+### Config Parsing Tests
+- Valid YAML with modules
+- Empty modules list → base image only
+- Missing .agentbox → base image only
+- Duplicate modules → error
+- Invalid module name → error
+- Malformed YAML → error
+
+### Build Tests
+- Build with single module (nodejs:20)
+- Build with multiple modules (nodejs:20 + java:17)
+- Build with versionless module (rust)
+- Verify PATH merging: nodejs + java both add to PATH
+- Rebuild only when needed (hash unchanged)
+- Rebuild when config changes
+- Rebuild when module file changes
+
+### Runtime Tests
+- Mounts created for missing directories
+- Mounts fail if path is file
+- Environment variables applied
+- PATH includes all module paths in order
+- Module-specific caches persist (npm, maven, cargo)
 
 ### Edge Cases
-- Missing module
-- Invalid YAML syntax
-- Conflicting modules
-- Module without mounts/env
+- No .agentbox file
 - Empty .agentbox file
-- No .agentbox file (fallback to base image)
-- Host mount directory exists but is a file
+- Module without mounts/env
+- Conflicting modules (both install same tool)
 - Host mount directory creation fails (permissions)
-- Corrupt module file (partial download)
+- Concurrent builds (same project)
 
 ## Rollback Strategy
 
 During development:
 1. Keep current `Dockerfile` as `Dockerfile.legacy`
-2. Add `--legacy` flag to use old Dockerfile
-3. If `.agentbox` not found, use base image (close to current behavior)
+2. Add `--legacy` flag to force use of legacy Dockerfile
+3. If `.agentbox` not found, default to base image
 
 After stable release:
-1. Remove `--legacy` flag
-2. Remove `Dockerfile.legacy`
-3. Current Dockerfile becomes Dockerfile.base
+1. Remove `--legacy` flag and `Dockerfile.legacy`
+2. `Dockerfile.base` becomes primary Dockerfile
 
 ## Success Metrics
 
-- Can build image with nodejs:20 module
-- Can build image with multiple modules
-- Rebuild only triggers when needed
-- Error messages are clear and actionable
-- Custom modules in `~/.agentbox/modules/` work
+- Build image with nodejs:20 module
+- Build image with multiple modules (nodejs + java)
+- Verify PATH contains all module paths
+- Verify mounts work (npm cache persists)
+- Rebuild only when needed
+- Error messages clear and actionable
+- Custom modules work from `~/.agentbox/modules/`
 - Documentation complete and tested
-- Migration path validated with real projects
 
 ## Dependencies
 
 ### External
-- `yq` (already in Dockerfile)
-- `sha256sum` (already available)
-- `realpath` (already available)
-- Bash 4+ (already required)
+- `yq` (YAML parsing)
+- `sha256sum` (hashing)
+- `realpath` (path resolution)
+- Bash 4+ (arrays, associative arrays)
 
 ### Internal
 - Current agentbox script
@@ -515,47 +622,59 @@ After stable release:
 
 ## Risks and Mitigations
 
-### Risk: Module complexity grows
-**Mitigation:** Keep module format simple, document limitations clearly
-
-### Risk: Build cache invalidation
-**Mitigation:** Use precise hashing, only rebuild when truly needed
-
-### Risk: User confusion during transition
-**Mitigation:** Clear documentation, helpful error messages, migration guide
-
-### Risk: Module conflicts
-**Mitigation:** Let Docker fail fast, surface clear error to user
-
 ### Risk: Malicious custom modules
-**Severity:** High (arbitrary code execution)
-**Mitigation:** 
-- Document that custom modules are trusted code
-- Implement security validation for mounts and env vars
-- Whitelist mount path prefixes
-- Blacklist dangerous environment variables
-- Cannot prevent malicious Dockerfile instructions (by design)
-- Users responsible for auditing custom modules
+**Severity:** High (arbitrary code execution during build)
+**Mitigation:**
+- **Primary:** Users responsible for auditing custom modules
+- **Defense-in-depth:** Validate mounts and env vars
+- **Cannot prevent:** Malicious Dockerfile instructions (by design)
+- **Documentation:** Prominent warning that modules are trusted code
 
-### Risk: Path traversal attacks
+### Risk: PATH injection
 **Severity:** Medium
 **Mitigation:**
-- Validate all module names (no `..` or `/`)
-- Validate all mount paths (no `..`, restricted to home)
-- Sanitize all user-provided paths
+- Validate PATH has no `.` or `./` entries
+- Validate PATH entries are within user home
+- Reject PATH pointing to writable system paths
+
+### Risk: Path traversal
+**Severity:** Medium
+**Mitigation:**
+- Validate module names: `^[a-z0-9_-]+$`
+- Validate mount paths: no `..`, restricted to home
+- Verify module directories aren't symlinks to system paths
+
+### Risk: Environment variable injection
+**Severity:** Medium
+**Mitigation:**
+- Blacklist critical variables: `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DOCKER_HOST`
+- Sanitize values to prevent shell injection
+
+### Risk: Concurrent builds
+**Severity:** Low
+**Mitigation:**
+- Rely on Docker's native build locking
+- Last build wins (acceptable for local development)
 
 ### Risk: Hash collision
-**Severity:** Low (8-char hash = 1 in 4 billion)
+**Severity:** Low (1 in 4 billion with 8-char hash)
 **Mitigation:**
+- Use SHA-256 for quality distribution
 - Document the risk
-- Use SHA-256 for quality hash distribution
-- Consider extending to 12 chars if collisions occur in practice
+- Can extend to 12 chars if needed
+
+### Risk: Module complexity creep
+**Mitigation:**
+- Keep module format simple (3 file types max)
+- Document limitations clearly
+- Reject feature requests that add complexity
 
 ## Future Enhancements (Out of Scope)
 
-- Module dependency resolution
-- Module versioning/update checking
+- Module dependency declaration (e.g., `maven` requires `java`)
+- Module aliases (e.g., `node` → `nodejs`)
 - Remote module repositories
-- Module aliases
-- Shared image layers optimization
+- Module update notifications
+- Shared base layers across projects
+- Module versioning/update checking
 - Automatic migration tool
