@@ -590,6 +590,10 @@ load_module_dockerfile() {
     # Check file size (max 1MB)
     local file_size
     file_size=$(stat -c%s "$dockerfile_path" 2>/dev/null || stat -f%z "$dockerfile_path" 2>/dev/null)
+    if [[ -z "$file_size" ]]; then
+        log_error "Cannot determine file size: $dockerfile_path"
+        return 1
+    fi
     if [[ $file_size -eq 0 ]]; then
         log_error "Dockerfile is empty: $dockerfile_path"
         return 1
