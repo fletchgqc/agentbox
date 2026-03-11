@@ -86,35 +86,36 @@ get_container_name() {
 }
 
 
-# Check if image needs rebuild
+# Check if image needs rebuild (module-aware)
 needs_rebuild() {
-    # Calculate current Dockerfile and entrypoint hashes
-    local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
-    local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+    local image_name="$1"
+    local modules_list="$2"
+    
+    # Calculate current hash
+    local current_hash
+    current_hash=$(get_image_hash "$modules_list")
 
     # Check if image exists
-    if ! $RUNTIME image inspect "$IMAGE_NAME" &> /dev/null; then
+    if ! $RUNTIME image inspect "$image_name" &> /dev/null; then
         return 0  # Needs rebuild - image doesn't exist
     fi
 
-    # Get stored hash from image
-    local stored_hash=$($RUNTIME inspect "$IMAGE_NAME" \
-        --format '{{ index .Config.Labels "agentbox.hash" }}' 2>/dev/null || echo "none")
+    # Get stored hash from image label
+    local stored_hash=$($RUNTIME inspect "$image_name" \
+        --format '{{ index .Config.Labels "agentbox.build.hash" }}' 2>/dev/null || echo "none")
 
     # Compare hashes
-    if [[ "$combined_hash" != "$stored_hash" ]]; then
+    if [[ "$current_hash" != "$stored_hash" ]]; then
         return 0  # Needs rebuild
     fi
 
     return 1  # No rebuild needed
 }
 
-# Build Docker image
+# Build Docker image (module-aware)
 build_image() {
-    local dockerfile_hash=$(calculate_hash "$DOCKERFILE_PATH")
-    local entrypoint_hash=$(calculate_hash "$ENTRYPOINT_PATH")
-    local combined_hash="${dockerfile_hash}-${entrypoint_hash}"
+    local image_name="$1"
+    local modules_list="$2"
 
     log_build "Building AgentBox image (this may take a few minutes on first run)..."
 
@@ -122,23 +123,49 @@ build_image() {
     local user_id=$(id -u)
     local group_id=$(id -g)
 
+    # Calculate hash
+    local build_hash
+    build_hash=$(get_image_hash "$modules_list")
+    
+    # Create temporary build directory
+    local build_dir
+    build_dir=$(mktemp -d "/tmp/agentbox-build-XXXXXX")
+    
+    # Generate Dockerfile
+    local generated_dockerfile="${build_dir}/Dockerfile"
+    if ! generate_dockerfile "$modules_list" "$generated_dockerfile"; then
+        log_error "Failed to generate Dockerfile"
+        rm -rf "$build_dir"
+        return 1
+    fi
+    
+    # Copy entrypoint to build directory
+    cp "${ENTRYPOINT_PATH}" "${build_dir}/entrypoint.sh"
+
     # Build with progress output
     local build_timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     if $RUNTIME build \
         --build-arg USER_ID="${user_id}" \
         --build-arg GROUP_ID="${group_id}" \
         --build-arg USERNAME="agent" \
-        --build-arg BUILD_TIMESTAMP=${build_timestamp} \
-        --label "agentbox.hash=${combined_hash}" \
-        --label "agentbox.version=1.0.0" \
+        --build-arg BUILD_TIMESTAMP="${build_timestamp}" \
+        --label "agentbox.build.hash=${build_hash}" \
+        --label "agentbox.version=2.0.0" \
         --label "agentbox.built=${build_timestamp}" \
-        -t "$IMAGE_NAME" \
-        "$SCRIPT_DIR" ; then
+        -t "$image_name" \
+        -f "$generated_dockerfile" \
+        "$build_dir" ; then
         log_success "Image built successfully!"
+        
+        # Cleanup
+        rm -rf "$build_dir"
+        
+        # Prune old images
         $RUNTIME image prune -f --filter "label=agentbox.version" &>/dev/null || true
         return 0
     else
         log_error "Failed to build image"
+        rm -rf "$build_dir"
         return 1
     fi
 }
@@ -235,6 +262,678 @@ validate_dir_path() {
     return 0
 }
 
+#############################################
+# Module System Functions
+#############################################
+
+# Module directory search paths
+get_module_search_paths() {
+    local paths=(
+        "${HOME}/.agentbox/modules"
+        "${SCRIPT_DIR}/modules"
+    )
+    echo "${paths[@]}"
+}
+
+# Validate module name format
+validate_module_name() {
+    local name="$1"
+    
+    # Must be lowercase alphanumeric with underscores/hyphens
+    if [[ ! "$name" =~ ^[a-z0-9_-]+$ ]]; then
+        return 1
+    fi
+    
+    # Reject path traversal
+    if [[ "$name" =~ \.\. ]] || [[ "$name" =~ / ]]; then
+        return 1
+    fi
+    
+    return 0
+}
+
+# Validate module directory isn't a symlink to dangerous location
+validate_module_directory() {
+    local module_dir="$1"
+    
+    # Check if it's a symlink
+    if [[ -L "$module_dir" ]]; then
+        local target
+        target=$(readlink -f "$module_dir" 2>/dev/null) || return 1
+        
+        # Symlink target must be within ~/.agentbox or agentbox repo
+        if [[ ! "$target" =~ ^${HOME}/.agentbox ]] && [[ ! "$target" =~ ^${SCRIPT_DIR} ]]; then
+            log_error "Module directory symlink points outside allowed locations: $target"
+            return 1
+        fi
+    fi
+    
+    return 0
+}
+
+# Validate mount path for security
+validate_mount_path() {
+    local mount_spec="$1"
+    local host_path container_path
+    
+    # Parse host:container
+    IFS=: read -r host_path container_path <<< "$mount_spec"
+    
+    # Expand tilde
+    host_path="${host_path/#\~/$HOME}"
+    
+    # Check for path traversal
+    if [[ "$host_path" =~ \.\. ]]; then
+        log_error "Path traversal not allowed in mount: $host_path"
+        return 1
+    fi
+    
+    # Must start with whitelisted prefixes
+    local allowed_prefixes=(
+        "${HOME}/.cache"
+        "${HOME}/.config"
+        "${HOME}/.npm"
+        "${HOME}/.m2"
+        "${HOME}/.gradle"
+        "${HOME}/.cargo"
+        "${HOME}/.rustup"
+        "${HOME}/.sdkman"
+        "${HOME}/.nvm"
+    )
+    
+    local allowed=false
+    for prefix in "${allowed_prefixes[@]}"; do
+        if [[ "$host_path" == "$prefix"* ]]; then
+            allowed=true
+            break
+        fi
+    done
+    
+    if [[ "$allowed" == "false" ]]; then
+        log_error "Mount path not in whitelist: $host_path"
+        log_error "Allowed prefixes: ~/.cache, ~/.config, ~/.npm, ~/.m2, ~/.gradle, ~/.cargo, ~/.rustup, ~/.sdkman, ~/.nvm"
+        return 1
+    fi
+    
+    # Check blacklist
+    local blacklist=(
+        "/var/run/docker.sock"
+        "/etc"
+        "/sys"
+        "/proc"
+        "/dev"
+    )
+    
+    for blocked in "${blacklist[@]}"; do
+        if [[ "$host_path" == "$blocked"* ]] || [[ "$container_path" == "$blocked"* ]]; then
+            log_error "Blocked mount path: $mount_spec"
+            return 1
+        fi
+    done
+    
+    return 0
+}
+
+# Validate environment variable
+validate_env_var() {
+    local env_spec="$1"
+    local var_name var_value
+    
+    # Parse VAR=value
+    IFS== read -r var_name var_value <<< "$env_spec"
+    
+    # Check blacklist
+    local blacklist=(
+        "LD_PRELOAD"
+        "LD_LIBRARY_PATH"
+        "DOCKER_HOST"
+        "DOCKER_TLS_VERIFY"
+        "DOCKER_CERT_PATH"
+    )
+    
+    for blocked in "${blacklist[@]}"; do
+        if [[ "$var_name" == "$blocked" ]]; then
+            log_error "Blocked environment variable: $var_name"
+            log_error "Blocked variables: LD_PRELOAD, LD_LIBRARY_PATH, DOCKER_HOST, DOCKER_TLS_VERIFY, DOCKER_CERT_PATH"
+            return 1
+        fi
+    done
+    
+    # Validate PATH entries
+    if [[ "$var_name" == "PATH" ]]; then
+        # Check for dangerous PATH entries
+        if [[ "$var_value" =~ (^|:)\.(:|$) ]] || [[ "$var_value" =~ (^|:)\.\/(:|$) ]]; then
+            log_error "PATH contains '.' or './' which is not allowed: $var_value"
+            return 1
+        fi
+    fi
+    
+    return 0
+}
+
+# Find module by name and optional version
+find_module() {
+    local module_spec="$1"
+    local module_name module_version
+    
+    # Parse name:version or just name
+    if [[ "$module_spec" =~ : ]]; then
+        IFS=: read -r module_name module_version <<< "$module_spec"
+    else
+        module_name="$module_spec"
+        module_version=""
+    fi
+    
+    # Normalize to lowercase
+    module_name="${module_name,,}"
+    
+    # Validate module name
+    if ! validate_module_name "$module_name"; then
+        log_error "Invalid module name: $module_name"
+        return 1
+    fi
+    
+    # Search for module in search paths
+    local search_paths
+    read -ra search_paths <<< "$(get_module_search_paths)"
+    
+    for base_path in "${search_paths[@]}"; do
+        local module_dir="${base_path}/${module_name}"
+        
+        if [[ ! -d "$module_dir" ]]; then
+            continue
+        fi
+        
+        # Validate module directory
+        if ! validate_module_directory "$module_dir"; then
+            continue
+        fi
+        
+        # Determine dockerfile name
+        local dockerfile_name
+        if [[ -n "$module_version" ]]; then
+            dockerfile_name="${module_version}.dockerfile"
+        else
+            dockerfile_name="dockerfile"
+        fi
+        
+        local dockerfile_path="${module_dir}/${dockerfile_name}"
+        
+        if [[ -f "$dockerfile_path" ]] && [[ -r "$dockerfile_path" ]]; then
+            echo "$module_dir"
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
+# List available versions for a module
+list_available_versions() {
+    local module_name="$1"
+    local versions=()
+    
+    local search_paths
+    read -ra search_paths <<< "$(get_module_search_paths)"
+    
+    for base_path in "${search_paths[@]}"; do
+        local module_dir="${base_path}/${module_name}"
+        
+        if [[ ! -d "$module_dir" ]]; then
+            continue
+        fi
+        
+        # Find all .dockerfile files
+        while IFS= read -r -d '' dockerfile; do
+            local basename
+            basename=$(basename "$dockerfile")
+            if [[ "$basename" == "dockerfile" ]]; then
+                versions+=("(no version)")
+            else
+                # Extract version from filename
+                local version="${basename%.dockerfile}"
+                versions+=("$version")
+            fi
+        done < <(find "$module_dir" -maxdepth 1 -name "*.dockerfile" -print0 2>/dev/null)
+    done
+    
+    if [[ ${#versions[@]} -eq 0 ]]; then
+        return 1
+    fi
+    
+    printf '%s\n' "${versions[@]}" | sort -u
+    return 0
+}
+
+# Show module error with helpful information
+show_module_error() {
+    local module_spec="$1"
+    local module_name module_version
+    
+    # Parse name:version
+    if [[ "$module_spec" =~ : ]]; then
+        IFS=: read -r module_name module_version <<< "$module_spec"
+    else
+        module_name="$module_spec"
+        module_version=""
+    fi
+    
+    module_name="${module_name,,}"
+    
+    log_error "Module not found: $module_spec"
+    echo ""
+    echo "Searched in:"
+    
+    local search_paths
+    read -ra search_paths <<< "$(get_module_search_paths)"
+    
+    for base_path in "${search_paths[@]}"; do
+        if [[ -n "$module_version" ]]; then
+            echo "  - ${base_path}/${module_name}/${module_version}.dockerfile"
+        else
+            echo "  - ${base_path}/${module_name}/dockerfile"
+        fi
+    done
+    
+    # Show available versions
+    echo ""
+    if available_versions=$(list_available_versions "$module_name" 2>/dev/null); then
+        echo "Available ${module_name} versions:"
+        while IFS= read -r version; do
+            echo "  - $version"
+        done <<< "$available_versions"
+    else
+        echo "Module '${module_name}' not found in any search path."
+    fi
+}
+
+# Load module dockerfile content
+load_module_dockerfile() {
+    local module_spec="$1"
+    local module_name module_version
+    
+    # Parse name:version
+    if [[ "$module_spec" =~ : ]]; then
+        IFS=: read -r module_name module_version <<< "$module_spec"
+    else
+        module_name="$module_spec"
+        module_version=""
+    fi
+    
+    local module_dir
+    module_dir=$(find_module "$module_spec") || {
+        show_module_error "$module_spec"
+        return 1
+    }
+    
+    local dockerfile_name
+    if [[ -n "$module_version" ]]; then
+        dockerfile_name="${module_version}.dockerfile"
+    else
+        dockerfile_name="dockerfile"
+    fi
+    
+    local dockerfile_path="${module_dir}/${dockerfile_name}"
+    
+    # Validate file
+    if [[ ! -f "$dockerfile_path" ]]; then
+        log_error "Dockerfile not found: $dockerfile_path"
+        return 1
+    fi
+    
+    if [[ ! -r "$dockerfile_path" ]]; then
+        log_error "Dockerfile not readable: $dockerfile_path"
+        return 1
+    fi
+    
+    # Check file size (max 1MB)
+    local file_size
+    file_size=$(stat -c%s "$dockerfile_path" 2>/dev/null || stat -f%z "$dockerfile_path" 2>/dev/null)
+    if [[ $file_size -eq 0 ]]; then
+        log_error "Dockerfile is empty: $dockerfile_path"
+        return 1
+    fi
+    if [[ $file_size -gt 1048576 ]]; then
+        log_error "Dockerfile too large (>1MB): $dockerfile_path"
+        return 1
+    fi
+    
+    cat "$dockerfile_path"
+}
+
+# Load module mounts
+load_module_mounts() {
+    local module_spec="$1"
+    local module_name module_version
+    
+    # Parse name:version
+    if [[ "$module_spec" =~ : ]]; then
+        IFS=: read -r module_name module_version <<< "$module_spec"
+    else
+        module_name="$module_spec"
+        module_version=""
+    fi
+    
+    local module_dir
+    module_dir=$(find_module "$module_spec") || return 1
+    
+    local mounts_name
+    if [[ -n "$module_version" ]]; then
+        mounts_name="${module_version}.mounts"
+    else
+        mounts_name="mounts"
+    fi
+    
+    local mounts_path="${module_dir}/${mounts_name}"
+    
+    # Mounts file is optional
+    if [[ ! -f "$mounts_path" ]]; then
+        return 0
+    fi
+    
+    if [[ ! -r "$mounts_path" ]]; then
+        log_error "Mounts file not readable: $mounts_path"
+        return 1
+    fi
+    
+    # Read and validate each mount
+    while IFS= read -r mount_spec; do
+        # Skip empty lines and comments
+        [[ -z "$mount_spec" ]] && continue
+        [[ "$mount_spec" =~ ^[[:space:]]*# ]] && continue
+        
+        # Validate mount
+        if ! validate_mount_path "$mount_spec"; then
+            log_error "Invalid mount in module $module_spec: $mount_spec"
+            return 1
+        fi
+        
+        echo "$mount_spec"
+    done < "$mounts_path"
+}
+
+# Load module environment variables
+load_module_env() {
+    local module_spec="$1"
+    local module_name module_version
+    
+    # Parse name:version
+    if [[ "$module_spec" =~ : ]]; then
+        IFS=: read -r module_name module_version <<< "$module_spec"
+    else
+        module_name="$module_spec"
+        module_version=""
+    fi
+    
+    local module_dir
+    module_dir=$(find_module "$module_spec") || return 1
+    
+    local env_name
+    if [[ -n "$module_version" ]]; then
+        env_name="${module_version}.env"
+    else
+        env_name="env"
+    fi
+    
+    local env_path="${module_dir}/${env_name}"
+    
+    # Env file is optional
+    if [[ ! -f "$env_path" ]]; then
+        return 0
+    fi
+    
+    if [[ ! -r "$env_path" ]]; then
+        log_error "Environment file not readable: $env_path"
+        return 1
+    fi
+    
+    # Read and validate each variable
+    while IFS= read -r env_spec; do
+        # Skip empty lines and comments
+        [[ -z "$env_spec" ]] && continue
+        [[ "$env_spec" =~ ^[[:space:]]*# ]] && continue
+        
+        # Validate env var
+        if ! validate_env_var "$env_spec"; then
+            log_error "Invalid environment variable in module $module_spec: $env_spec"
+            return 1
+        fi
+        
+        echo "$env_spec"
+    done < "$env_path"
+}
+
+#############################################
+# Configuration File Functions
+#############################################
+
+# Find .agentbox config file by searching upward
+find_agentbox_config() {
+    local search_dir="$PROJECT_DIR"
+    
+    while [[ "$search_dir" != "/" ]]; do
+        if [[ -f "${search_dir}/.agentbox" ]]; then
+            echo "${search_dir}/.agentbox"
+            return 0
+        fi
+        search_dir=$(dirname "$search_dir")
+    done
+    
+    # Not found
+    return 1
+}
+
+# Parse .agentbox config file and extract modules
+parse_agentbox_config() {
+    local config_file="$1"
+    
+    # Check if file exists and is readable
+    if [[ ! -f "$config_file" ]] || [[ ! -r "$config_file" ]]; then
+        log_error "Config file not readable: $config_file"
+        return 1
+    fi
+    
+    # Use yq to parse YAML
+    if ! command -v yq &>/dev/null; then
+        log_error "yq not found. Required for parsing .agentbox config."
+        return 1
+    fi
+    
+    # Validate YAML syntax
+    if ! yq eval . "$config_file" &>/dev/null; then
+        log_error "Invalid YAML syntax in $config_file"
+        return 1
+    fi
+    
+    # Extract modules array
+    local modules_json
+    modules_json=$(yq eval '.modules // []' -o json "$config_file" 2>/dev/null)
+    
+    if [[ -z "$modules_json" ]] || [[ "$modules_json" == "null" ]] || [[ "$modules_json" == "[]" ]]; then
+        # No modules specified, return empty
+        return 0
+    fi
+    
+    # Parse JSON array and validate each module
+    local modules=()
+    local seen_modules=()
+    
+    while IFS= read -r module_spec; do
+        # Skip empty
+        [[ -z "$module_spec" ]] && continue
+        
+        # Normalize to lowercase
+        module_spec="${module_spec,,}"
+        
+        # Parse name:version
+        local module_name
+        if [[ "$module_spec" =~ : ]]; then
+            IFS=: read -r module_name _ <<< "$module_spec"
+        else
+            module_name="$module_spec"
+        fi
+        
+        # Validate module name
+        if ! validate_module_name "$module_name"; then
+            log_error "Invalid module name in config: $module_spec"
+            return 1
+        fi
+        
+        # Check for duplicates
+        if [[ " ${seen_modules[*]} " =~ " ${module_spec} " ]]; then
+            log_error "Duplicate module in .agentbox: $module_spec"
+            return 1
+        fi
+        
+        seen_modules+=("$module_spec")
+        modules+=("$module_spec")
+    done < <(echo "$modules_json" | jq -r '.[]' 2>/dev/null)
+    
+    # Output modules one per line
+    printf '%s\n' "${modules[@]}"
+}
+
+# Get modules list from config or empty for base-only
+get_modules_list() {
+    local config_file
+    
+    # Try to find config file
+    if ! config_file=$(find_agentbox_config); then
+        # No config found, use base image only
+        return 0
+    fi
+    
+    log_info "Found config: $config_file"
+    
+    # Parse config file
+    local modules
+    if ! modules=$(parse_agentbox_config "$config_file"); then
+        return 1
+    fi
+    
+    echo "$modules"
+}
+
+#############################################
+# End Configuration File Functions
+#############################################
+
+#############################################
+# Dynamic Dockerfile Generation Functions
+#############################################
+
+# Generate Dockerfile from base + modules
+generate_dockerfile() {
+    local modules_list="$1"
+    local output_file="$2"
+    
+    # Start with Dockerfile.base
+    local dockerfile_base="${SCRIPT_DIR}/Dockerfile.base"
+    if [[ ! -f "$dockerfile_base" ]]; then
+        # Fallback to regular Dockerfile if base doesn't exist yet
+        dockerfile_base="${SCRIPT_DIR}/Dockerfile"
+    fi
+    
+    cat "$dockerfile_base" > "$output_file"
+    
+    # If no modules, we're done
+    if [[ -z "$modules_list" ]]; then
+        return 0
+    fi
+    
+    # Add each module's dockerfile content
+    while IFS= read -r module_spec; do
+        [[ -z "$module_spec" ]] && continue
+        
+        echo "" >> "$output_file"
+        echo "# Module: $module_spec" >> "$output_file"
+        
+        if ! module_content=$(load_module_dockerfile "$module_spec"); then
+            log_error "Failed to load module: $module_spec"
+            return 1
+        fi
+        
+        echo "$module_content" >> "$output_file"
+    done <<< "$modules_list"
+    
+    return 0
+}
+
+# Calculate hash of all build inputs
+get_image_hash() {
+    local modules_list="$1"
+    local config_file
+    
+    # Find config file (if exists)
+    config_file=$(find_agentbox_config 2>/dev/null) || config_file=""
+    
+    # Combine all inputs for hashing
+    local hash_input=""
+    
+    # 1. Project directory path
+    hash_input+="PROJECT_DIR:${PROJECT_DIR}"$'\n'
+    
+    # 2. Config file content (if exists)
+    if [[ -n "$config_file" ]] && [[ -f "$config_file" ]]; then
+        hash_input+="CONFIG:"$(cat "$config_file")$'\n'
+    fi
+    
+    # 3. Dockerfile.base content
+    local dockerfile_base="${SCRIPT_DIR}/Dockerfile.base"
+    if [[ -f "$dockerfile_base" ]]; then
+        hash_input+="DOCKERFILE_BASE:"$(cat "$dockerfile_base")$'\n'
+    else
+        # Fallback to regular Dockerfile
+        hash_input+="DOCKERFILE:"$(cat "${SCRIPT_DIR}/Dockerfile")$'\n'
+    fi
+    
+    # 4. Module files content
+    if [[ -n "$modules_list" ]]; then
+        while IFS= read -r module_spec; do
+            [[ -z "$module_spec" ]] && continue
+            
+            # Dockerfile content
+            local dockerfile_content
+            dockerfile_content=$(load_module_dockerfile "$module_spec" 2>/dev/null) || continue
+            hash_input+="MODULE_DOCKERFILE:${module_spec}:${dockerfile_content}"$'\n'
+            
+            # Mounts content
+            local mounts_content
+            mounts_content=$(load_module_mounts "$module_spec" 2>/dev/null) || mounts_content=""
+            if [[ -n "$mounts_content" ]]; then
+                hash_input+="MODULE_MOUNTS:${module_spec}:${mounts_content}"$'\n'
+            fi
+            
+            # Env content
+            local env_content
+            env_content=$(load_module_env "$module_spec" 2>/dev/null) || env_content=""
+            if [[ -n "$env_content" ]]; then
+                hash_input+="MODULE_ENV:${module_spec}:${env_content}"$'\n'
+            fi
+        done <<< "$modules_list"
+    fi
+    
+    # Calculate SHA-256 and take first 8 characters
+    echo -n "$hash_input" | sha256sum | cut -c1-8
+}
+
+# Get image name based on config
+get_image_name() {
+    local modules_list="$1"
+    
+    if [[ -z "$modules_list" ]]; then
+        echo "agentbox:base"
+    else
+        local hash
+        hash=$(get_image_hash "$modules_list")
+        echo "agentbox:${hash}"
+    fi
+}
+
+#############################################
+# End Dynamic Dockerfile Generation Functions
+#############################################
+
 # Mount additional dirs to Docker mount options
 mount_additional_dirs() {
     local -n mount_opts_ref=$1
@@ -259,7 +958,9 @@ run_container() {
     local tool="$3"
     local ignore_dot_env="$4"
     local mount_docker_socket="$5"
-    shift 5
+    local image_name="$6"
+    local modules_list="$7"
+    shift 7
 
     # Check if first arg is "shell" mode
     local shell_mode=false
@@ -289,6 +990,42 @@ run_container() {
     )
 
     mount_additional_dirs mount_opts "${extra_dirs_to_mount[@]}"
+    
+    # Add module-specific mounts
+    if [[ -n "$modules_list" ]]; then
+        while IFS= read -r module_spec; do
+            [[ -z "$module_spec" ]] && continue
+            
+            # Load module mounts
+            local module_mounts
+            if module_mounts=$(load_module_mounts "$module_spec" 2>/dev/null); then
+                while IFS= read -r mount_spec; do
+                    [[ -z "$mount_spec" ]] && continue
+                    
+                    # Parse host:container
+                    local host_path container_path
+                    IFS=: read -r host_path container_path <<< "$mount_spec"
+                    
+                    # Expand tilde
+                    host_path="${host_path/#\~/$HOME}"
+                    
+                    # Create host directory if it doesn't exist
+                    if [[ ! -d "$host_path" ]]; then
+                        if [[ -e "$host_path" ]]; then
+                            log_error "Mount path exists but is not a directory: $host_path"
+                            exit 1
+                        fi
+                        mkdir -p "$host_path" || {
+                            log_error "Failed to create mount directory: $host_path"
+                            exit 1
+                        }
+                    fi
+                    
+                    mount_opts+=(-v "${host_path}:${container_path}:z")
+                done <<< "$module_mounts"
+            fi
+        done <<< "$modules_list"
+    fi
 
     # Mount .gitconfig to temp location for copying (if it exists)
     if [[ -f "${HOME}/.gitconfig" ]]; then
@@ -426,6 +1163,54 @@ run_container() {
     else
         log_info ".env files not loaded (--ignore-dot-env flag set)"
     fi
+    
+    # Add module-specific environment variables
+    declare -A module_env_vars
+    local merged_path=""
+    
+    if [[ -n "$modules_list" ]]; then
+        while IFS= read -r module_spec; do
+            [[ -z "$module_spec" ]] && continue
+            
+            # Load module environment variables
+            local module_env
+            if module_env=$(load_module_env "$module_spec" 2>/dev/null); then
+                while IFS= read -r env_spec; do
+                    [[ -z "$env_spec" ]] && continue
+                    
+                    # Parse VAR=value
+                    local var_name var_value
+                    IFS== read -r var_name var_value <<< "$env_spec"
+                    
+                    # Handle PATH specially - merge all module PATHs
+                    if [[ "$var_name" == "PATH" ]]; then
+                        # Extract prepend portion (before :$PATH)
+                        local path_prepend="${var_value%%:*}"
+                        if [[ -n "$path_prepend" ]] && [[ "$path_prepend" != "$var_value" ]]; then
+                            if [[ -n "$merged_path" ]]; then
+                                merged_path="${merged_path}:${path_prepend}"
+                            else
+                                merged_path="$path_prepend"
+                            fi
+                        fi
+                    else
+                        # Store non-PATH variables
+                        module_env_vars["$var_name"]="$var_value"
+                    fi
+                done <<< "$module_env"
+            fi
+        done <<< "$modules_list"
+    fi
+    
+    # Add merged PATH if any modules defined it
+    if [[ -n "$merged_path" ]]; then
+        mount_opts+=(--env "PATH=${merged_path}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+    fi
+    
+    # Add other module environment variables
+    for var_name in "${!module_env_vars[@]}"; do
+        mount_opts+=(--env "${var_name}=${module_env_vars[$var_name]}")
+    done
 
     # Build extra host entries from AGENTBOX_EXTRA_HOSTS
     local host_args=()
@@ -478,7 +1263,7 @@ run_container() {
         "${env_file_args[@]}" \
         -w "$PROJECT_DIR" \
         --init \
-        "$IMAGE_NAME" \
+        "$image_name" \
         "${container_cmd[@]}"
 }
 
@@ -502,11 +1287,24 @@ Options:
 Commands:
     shell [--admin]             Start interactive shell instead of Claude CLI
     ssh-init                    Initialize SSH directory for AgentBox
+    modules list [name]         List all available modules (optionally filter by name)
+    modules info <name>         Show details for a specific module
 
     If no command is provided, Claude CLI will be started automatically.
     Use 'shell' command to get a shell instead of Claude CLI.
     Use 'shell --admin' to get a shell with sudo privileges.
     Other commands will be executed inside the container.
+
+Module System:
+    Create a .agentbox file in your project to specify development tools:
+    
+    modules:
+      - nodejs:20
+      - java:17
+      - rust
+    
+    Modules are loaded from ~/.agentbox/modules/ or built-in modules.
+    Each project gets a custom image with only the requested modules.
 
 Examples:
     agentbox                              # Start Claude CLI for current project
@@ -519,6 +1317,9 @@ Examples:
     agentbox python script.py             # Run Python script in container
     agentbox --rebuild                    # Force rebuild image
     agentbox ssh-init                     # Set up SSH for AgentBox
+    agentbox modules list                 # Show all available modules
+    agentbox modules list nodejs          # Show Node.js module versions
+    agentbox modules info nodejs:20       # Show details for Node.js 20 module
     AGENTBOX_TOOL=opencode agentbox       # Use env var to select tool
 
 Environment variables (set in ~/.agentbox/.env):
@@ -533,6 +1334,159 @@ All directories are mounted at their full host paths for symlink/path compatibil
 Container Runtime:
     Auto-detected (Docker preferred, Podman fallback)
 EOF
+}
+
+# List available modules
+cmd_modules_list() {
+    local filter_name="$1"
+    
+    local search_paths
+    read -ra search_paths <<< "$(get_module_search_paths)"
+    
+    # Collect all modules
+    declare -A modules_map
+    
+    for base_path in "${search_paths[@]}"; do
+        if [[ ! -d "$base_path" ]]; then
+            continue
+        fi
+        
+        # Find all module directories
+        for module_dir in "$base_path"/*; do
+            [[ ! -d "$module_dir" ]] && continue
+            
+            local module_name=$(basename "$module_dir")
+            
+            # Apply filter if specified
+            if [[ -n "$filter_name" ]] && [[ "$module_name" != "$filter_name" ]]; then
+                continue
+            fi
+            
+            # Find all versions
+            local versions=()
+            for dockerfile in "$module_dir"/*.dockerfile "$module_dir"/dockerfile; do
+                [[ ! -f "$dockerfile" ]] && continue
+                
+                local basename
+                basename=$(basename "$dockerfile")
+                if [[ "$basename" == "dockerfile" ]]; then
+                    versions+=("versionless")
+                else
+                    local version="${basename%.dockerfile}"
+                    versions+=("$version")
+                fi
+            done
+            
+            # Store versions (use newline as delimiter)
+            if [[ ${#versions[@]} -gt 0 ]]; then
+                if [[ -n "${modules_map[$module_name]:-}" ]]; then
+                    # Merge versions
+                    local IFS=$'\n'
+                    modules_map[$module_name]="${modules_map[$module_name]}"$'\n'"${versions[*]}"
+                else
+                    local IFS=$'\n'
+                    modules_map[$module_name]="${versions[*]}"
+                fi
+            fi
+        done
+    done
+    
+    # Display results
+    if [[ ${#modules_map[@]} -eq 0 ]]; then
+        if [[ -n "$filter_name" ]]; then
+            echo "No modules found matching: $filter_name"
+        else
+            echo "No modules found."
+        fi
+        return 1
+    fi
+    
+    echo "Available modules:"
+    echo ""
+    
+    for module_name in $(printf '%s\n' "${!modules_map[@]}" | sort); do
+        echo "${module_name}:"
+        # Print versions, deduplicated and sorted
+        local versions="${modules_map[$module_name]}"
+        echo "$versions" | sort -u | sed 's/^/  - /'
+    done
+}
+
+# Show details for a specific module
+cmd_modules_info() {
+    local module_spec="$1"
+    
+    if [[ -z "$module_spec" ]]; then
+        log_error "Module name required. Usage: agentbox modules info <module:version>"
+        return 1
+    fi
+    
+    # Find module
+    local module_dir
+    if ! module_dir=$(find_module "$module_spec"); then
+        show_module_error "$module_spec"
+        return 1
+    fi
+    
+    # Parse module spec
+    local module_name module_version
+    if [[ "$module_spec" =~ : ]]; then
+        IFS=: read -r module_name module_version <<< "$module_spec"
+    else
+        module_name="$module_spec"
+        module_version=""
+    fi
+    
+    # Determine file names
+    local dockerfile_name mounts_name env_name
+    if [[ -n "$module_version" ]]; then
+        dockerfile_name="${module_version}.dockerfile"
+        mounts_name="${module_version}.mounts"
+        env_name="${module_version}.env"
+    else
+        dockerfile_name="dockerfile"
+        mounts_name="mounts"
+        env_name="env"
+    fi
+    
+    echo "Module: $module_spec"
+    echo "Location: ${module_dir}/${dockerfile_name}"
+    echo ""
+    
+    # Show mounts
+    local mounts_path="${module_dir}/${mounts_name}"
+    if [[ -f "$mounts_path" ]]; then
+        echo "Mounts:"
+        while IFS= read -r mount_spec; do
+            [[ -z "$mount_spec" ]] && continue
+            [[ "$mount_spec" =~ ^[[:space:]]*# ]] && continue
+            echo "  $mount_spec"
+        done < "$mounts_path"
+        echo ""
+    fi
+    
+    # Show environment
+    local env_path="${module_dir}/${env_name}"
+    if [[ -f "$env_path" ]]; then
+        echo "Environment:"
+        while IFS= read -r env_spec; do
+            [[ -z "$env_spec" ]] && continue
+            [[ "$env_spec" =~ ^[[:space:]]*# ]] && continue
+            echo "  $env_spec"
+        done < "$env_path"
+        echo ""
+    fi
+    
+    # Show excerpt from dockerfile
+    local dockerfile_path="${module_dir}/${dockerfile_name}"
+    if [[ -f "$dockerfile_path" ]]; then
+        echo "Installation (excerpt):"
+        head -5 "$dockerfile_path" | sed 's/^/  /'
+        local line_count=$(wc -l < "$dockerfile_path")
+        if [[ $line_count -gt 5 ]]; then
+            echo "  ... (${line_count} lines total)"
+        fi
+    fi
 }
 
 # Set up dedicated SSH directory for AgentBox
@@ -644,6 +1598,38 @@ main() {
                 ssh_setup
                 exit 0
                 ;;
+            modules)
+                shift
+                if [[ $# -eq 0 ]]; then
+                    log_error "modules command requires a subcommand"
+                    echo "Usage: agentbox modules <list|info> [args]"
+                    exit 1
+                fi
+                
+                local subcmd="$1"
+                shift
+                
+                case "$subcmd" in
+                    list)
+                        cmd_modules_list "${1:-}"
+                        exit 0
+                        ;;
+                    info)
+                        if [[ $# -eq 0 ]]; then
+                            log_error "modules info requires a module name"
+                            echo "Usage: agentbox modules info <module:version>"
+                            exit 1
+                        fi
+                        cmd_modules_info "$1"
+                        exit 0
+                        ;;
+                    *)
+                        log_error "Unknown modules subcommand: $subcmd"
+                        echo "Available: list, info"
+                        exit 1
+                        ;;
+                esac
+                ;;
             *)
                 cmd_args+=("$1")
                 shift
@@ -664,6 +1650,24 @@ main() {
     # Get container name for current project
     local container_name=$(get_container_name)
 
+    # Get modules list from config
+    local modules_list
+    if ! modules_list=$(get_modules_list); then
+        log_error "Failed to parse .agentbox config"
+        exit 1
+    fi
+    
+    # Determine image name based on modules
+    local image_name
+    image_name=$(get_image_name "$modules_list")
+    
+    # Show modules if any
+    if [[ -n "$modules_list" ]]; then
+        log_info "Modules: $(echo "$modules_list" | tr '\n' ' ' | sed 's/ $//')"
+    else
+        log_info "Using base image (no modules)"
+    fi
+
     # Validate dir paths (batch all errors so user sees all problems at once)
     local project_realpath
     project_realpath=$(realpath "$PROJECT_DIR")
@@ -680,14 +1684,14 @@ main() {
     fi
 
     # Check if rebuild is needed or forced
-    if [[ "$force_rebuild" == "true" ]] || needs_rebuild; then
+    if [[ "$force_rebuild" == "true" ]] || needs_rebuild "$image_name" "$modules_list"; then
         if [[ "$force_rebuild" == "true" ]]; then
             log_info "Forcing image rebuild..."
         else
-            log_info "Dockerfile or entrypoint changed, rebuilding automatically..."
+            log_info "Configuration changed, rebuilding automatically..."
         fi
 
-        if ! build_image; then
+        if ! build_image "$image_name" "$modules_list"; then
             log_error "Build failed!"
             exit 1
         fi
@@ -697,12 +1701,12 @@ main() {
     # Run or attach to container
     if [[ "$shell_mode" == "true" ]]; then
         if [[ "$admin_mode" == "true" ]]; then
-            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "shell" "--admin" "${cmd_args[@]}"
+            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "$image_name" "$modules_list" "shell" "--admin" "${cmd_args[@]}"
         else
-            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "shell" "${cmd_args[@]}"
+            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "$image_name" "$modules_list" "shell" "${cmd_args[@]}"
         fi
     else
-        run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "${cmd_args[@]}"
+        run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "$image_name" "$modules_list" "${cmd_args[@]}"
     fi
 }
 

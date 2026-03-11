@@ -1,0 +1,4 @@
+# Install Rust via rustup as agent user
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    echo 'source "$HOME/.cargo/env"' >> ~/.bashrc && \
+    echo 'source "$HOME/.cargo/env"' >> ~/.zshrc

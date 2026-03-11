@@ -1,0 +1,2 @@
+~/.cargo:/home/agent/.cargo
+~/.rustup:/home/agent/.rustup

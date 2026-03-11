@@ -6,9 +6,10 @@ A container-based development environment for running agentic coding tools in a 
 
 ## Features
 
+- **Modular Plugin System**: Projects specify only the development tools they need via a `.agentbox` config file
 - **Shares project directory with host**: Maps a volume with the source code so that you can see and modify the agent's changes on the host machine - just like if you were running your tool without a container.
 - **Multi-Tool Support**: All agentic coding tools are supported, some built-in, others [via prompt](#adding-tools).
-- **Unified Development Environment**: Single container image with Python, Node.js, Java, and Shell support
+- **Project-Specific Images**: Each project gets a custom image with only requested modules, avoiding version conflicts
 - **Isolated SSH**: Dedicated SSH directory for secure Git operations
 - **Low-Maintenance Philosophy**: Always uses latest LTS tool versions, rebuilds container automatically when necessary
 
@@ -115,21 +116,88 @@ agentbox ssh-init
 > [!NOTE] 
 > Tool selection via `--tool` flag takes precedence over the `AGENTBOX_TOOL` environment variable.
 
-## How It Works
+## Module System
 
-AgentBox creates ephemeral containers (with `--rm`) that are automatically removed when you exit. However, important data persists between sessions:
+AgentBox uses a modular system where projects specify required development tools via a `.agentbox` configuration file. Each project gets a custom-built image with only the needed modules.
+
+### Using Modules
+
+Create a `.agentbox` file in your project root:
+
+```yaml
+modules:
+  - nodejs:20
+  - java:17
+  - rust
+```
+
+AgentBox will automatically search upward from your current directory (like `.git`) to find the configuration.
+
+### Available Modules
+
+```bash
+# List all available modules
+agentbox modules list
+
+# Show details for a specific module
+agentbox modules info nodejs:20
+
+# Filter by name
+agentbox modules list nodejs
+```
+
+### Built-in Modules
+
+- **nodejs:20, nodejs:22** - Node.js via nvm with global packages (typescript, eslint, prettier, yarn, pnpm)
+- **java:17, java:21** - Java via SDKMAN with Gradle and Maven
+- **rust** - Rust via rustup (version managed by rustup itself)
+
+### Module Capabilities
+
+Each module can specify:
+- **Dockerfile instructions** - Tools to install
+- **Volume mounts** - Persistent caches (e.g., `~/.npm`, `~/.m2`, `~/.cargo`)
+- **Environment variables** - PATH and tool-specific vars
+
+### No-Config Fallback
+
+If no `.agentbox` file is found, AgentBox builds a base image with:
+- Essential tools (git, vim, curl, jq, yq, etc.)
+- Build tools (gcc, make, cmake)
+- Python with uv
+- Claude Code and OpenCode
+
+This lets you use AgentBox immediately without configuration.
+
+### Custom Modules
+
+Create custom modules in `~/.agentbox/modules/`:
 
 ```
-Single Dockerfile → Build once → agentbox:latest image
-                                         ↓
-                    ┌────────────────────┼────────────────────┐
-                    ↓                    ↓                    ↓
-          Container: project1    Container: project2    Container: project3
-          (ephemeral, --rm)      (ephemeral, --rm)      (ephemeral, --rm)
-          Mounts: ~/code/api    Mounts: ~/code/web     Mounts: ~/code/cli
+~/.agentbox/modules/
+  mymodule/
+    1.0.dockerfile
+    1.0.mounts
+    1.0.env
+```
+
+See [docs/plugins/module-format.md](docs/plugins/module-format.md) for the module specification.
+
+## How It Works
+
+AgentBox creates ephemeral containers (with `--rm`) that are automatically removed when you exit. With the module system, each project can have a different set of tools:
+
+```
+.agentbox config → Dynamic build → agentbox:<hash> image
+    (per project)                        ↓
+                    ┌───────────────────┼──────────────────┐
+                    ↓                   ↓                  ↓
+          Project: nodejs+java   Project: rust      Project: base
+          Image: agentbox:a1b2   Image: agentbox:c3d4  Image: agentbox:base
+          Container (ephemeral)  Container (ephemeral)  Container (ephemeral)
 
 Persistent data (survives container removal):
-  Cache: ~/.cache/agentbox/agentbox-<hash>/
+  Module caches: ~/.npm, ~/.m2, ~/.cargo, etc. (per module)
   History: ~/.agentbox/projects/agentbox-<hash>/history/
   Claude: ~/.claude
   OpenCode: ~/.config/opencode and ~/.local/share/opencode
@@ -137,14 +205,26 @@ Persistent data (survives container removal):
 
 ## Languages and Tools
 
-The unified container image includes:
+### Base Image
+
+All AgentBox images include:
 
 - **Python**: Latest version with `uv` for fast package management
-- **Node.js**: Latest LTS via NVM with npm, yarn, and pnpm
-- **Java**: Latest LTS via SDKMAN with Gradle
-- **Shell**: Zsh (default) and Bash with common utilities
+- **Essential tools**: git, vim, curl, wget, jq, yq, etc.
+- **Build tools**: gcc, make, cmake, build-essential
+- **Shell**: Zsh (default) and Bash with oh-my-zsh
 - **Claude CLI**: Pre-installed with per-project authentication
 - **OpenCode**: Pre-installed as an alternative AI coding tool
+
+### Language Modules
+
+Language-specific tools are installed via modules specified in `.agentbox`:
+
+- **Node.js** (via modules): Specify `nodejs:20` or `nodejs:22`
+- **Java** (via modules): Specify `java:17` or `java:21`  
+- **Rust** (via modules): Specify `rust`
+
+This approach prevents version conflicts between projects and keeps images small
 
 ## Authenticating to Git or other SCC Providers
 

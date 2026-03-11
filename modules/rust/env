@@ -1,0 +1,3 @@
+CARGO_HOME=/home/agent/.cargo
+RUSTUP_HOME=/home/agent/.rustup
+PATH=/home/agent/.cargo/bin:$PATH
