@@ -130,6 +130,7 @@ build_image() {
     # Create temporary build directory
     local build_dir
     build_dir=$(mktemp -d "/tmp/agentbox-build-XXXXXX")
+    trap "rm -rf '$build_dir'" RETURN
     
     # Generate Dockerfile
     local generated_dockerfile="${build_dir}/Dockerfile"
@@ -401,9 +402,9 @@ validate_env_var() {
     
     # Validate PATH entries
     if [[ "$var_name" == "PATH" ]]; then
-        # Check for dangerous PATH entries
-        if [[ "$var_value" =~ (^|:)\.(:|$) ]] || [[ "$var_value" =~ (^|:)\.\/(:|$) ]]; then
-            log_error "PATH contains '.' or './' which is not allowed: $var_value"
+        # Check for relative path components
+        if [[ "$var_value" =~ (^|:)\.\.?(/|:|$) ]]; then
+            log_error "PATH contains relative paths (. or ..) which is not allowed: $var_value"
             return 1
         fi
     fi
@@ -811,6 +812,16 @@ get_modules_list() {
         return 1
     fi
     
+    # Validate all modules exist before proceeding
+    if [[ -n "$modules" ]]; then
+        while IFS= read -r module_spec; do
+            if ! find_module "$module_spec" &>/dev/null; then
+                show_module_error "$module_spec"
+                return 1
+            fi
+        done <<< "$modules"
+    fi
+    
     echo "$modules"
 }
 
@@ -1013,12 +1024,13 @@ run_container() {
                     if [[ ! -d "$host_path" ]]; then
                         if [[ -e "$host_path" ]]; then
                             log_error "Mount path exists but is not a directory: $host_path"
-                            exit 1
+                            return 1
                         fi
-                        mkdir -p "$host_path" || {
+                        if ! mkdir -p "$host_path" 2>/dev/null; then
                             log_error "Failed to create mount directory: $host_path"
-                            exit 1
-                        }
+                            log_error "Check permissions and disk space"
+                            return 1
+                        fi
                     fi
                     
                     mount_opts+=(-v "${host_path}:${container_path}:z")
@@ -1184,9 +1196,9 @@ run_container() {
                     
                     # Handle PATH specially - merge all module PATHs
                     if [[ "$var_name" == "PATH" ]]; then
-                        # Extract prepend portion (before :$PATH)
-                        local path_prepend="${var_value%%:*}"
-                        if [[ -n "$path_prepend" ]] && [[ "$path_prepend" != "$var_value" ]]; then
+                        # Extract prepend portion (everything before :$PATH)
+                        if [[ "$var_value" =~ ^(.+):?\$PATH$ ]]; then
+                            local path_prepend="${BASH_REMATCH[1]}"
                             if [[ -n "$merged_path" ]]; then
                                 merged_path="${merged_path}:${path_prepend}"
                             else
