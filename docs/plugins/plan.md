@@ -6,6 +6,49 @@ Transform agentbox from a monolithic Dockerfile to a modular system where projec
 
 ## Implementation Phases
 
+### Phase 0: Security and Validation Layer
+
+Implement security controls before module loading system to prevent malicious module configurations.
+
+#### 0.1 Input Validation Functions
+
+**New Functions:**
+```bash
+validate_mount_path()       # Security check for mount paths
+validate_env_var()          # Security check for environment variables
+validate_module_name()      # Prevent path traversal in module names
+sanitize_path()            # Remove ../ and ensure no traversal
+```
+
+**Mount Path Security:**
+- Reject absolute paths outside user home directory
+- Reject paths containing `..` (path traversal)
+- Whitelist allowed prefixes: `~/.cache`, `~/.config`, `~/.npm`, `~/.m2`, `~/.gradle`, `~/.cargo`, `~/.rustup`, `~/.sdkman`, `~/.nvm`
+- Reject sensitive paths: `/var/run/docker.sock`, `/etc`, `/root`, `/sys`, `/proc`
+
+**Environment Variable Security:**
+- Blacklist critical variables: `LD_PRELOAD`, `LD_LIBRARY_PATH`, `DOCKER_HOST`, `DOCKER_TLS_VERIFY`
+- Allow PATH modifications but validate no malicious prefixes
+- Sanitize values to prevent injection
+
+**Module Name Security:**
+- Reject names containing `/`, `..`, or absolute paths
+- Only allow alphanumeric, dash, underscore
+- Format: `^[a-z0-9_-]+$`
+
+#### 0.2 File Permission Checks
+
+**New Functions:**
+```bash
+check_module_readable()     # Verify module files are readable
+verify_module_integrity()   # Check all expected files present
+```
+
+**Checks:**
+- Verify `.dockerfile` exists and is readable
+- Verify `.mounts` and `.env` are readable (if present)
+- Fail early with clear error if permission denied
+
 ### Phase 1: Module Infrastructure
 
 #### 1.1 Create Module Directory Structure
@@ -45,12 +88,18 @@ Create bash functions to:
 **New Functions (in `agentbox` script):**
 ```bash
 find_module()           # Locate module file by name:version
-validate_module()       # Check module files exist and are readable
+validate_module()       # Check module files exist, are readable, and pass security checks
 load_module_dockerfile() # Return Dockerfile instructions
-load_module_mounts()    # Return mount specifications
-load_module_env()       # Return environment variables
+load_module_mounts()    # Return mount specifications (after security validation)
+load_module_env()       # Return environment variables (after security validation)
 list_available_versions() # For error messages
 ```
+
+**Security Integration:**
+- `find_module()` calls `validate_module_name()` before searching
+- `validate_module()` calls `check_module_readable()` and `verify_module_integrity()`
+- `load_module_mounts()` validates each mount path with `validate_mount_path()`
+- `load_module_env()` validates each variable with `validate_env_var()`
 
 ### Phase 2: Configuration System
 
@@ -79,8 +128,14 @@ parse_agentbox_config()  # Parse YAML, extract modules list
 
 **Dependencies:**
 - Use `yq` (already in Dockerfile) for YAML parsing
-- Validate syntax
+- Validate YAML syntax before parsing (prevent injection)
 - Extract module list in format `name:version`
+- Validate each module name format with `validate_module_name()`
+
+**Security:**
+- Reject malformed YAML that could exploit parser
+- Validate module names don't contain path traversal
+- Check for duplicate modules
 
 ### Phase 3: Dynamic Image Building
 
@@ -126,9 +181,11 @@ get_image_name()  # Return agentbox:<project-path-hash>
 ```
 
 **Logic:**
-- Hash the full project directory path
-- Use first 8 characters of hash
+- Hash the directory containing `.agentbox` file (project root)
+- Use first 8 characters of SHA-256 hash
 - Format: `agentbox:7a3f9c2e`
+
+**Note:** Hash collision risk with 8 chars is ~1 in 4 billion. Acceptable for local development use case.
 
 ### Phase 4: Rebuild Detection
 
@@ -145,11 +202,18 @@ Enhance `needs_rebuild()` to check:
 needs_rebuild()
 ```
 
-**New tracking:**
-- Store hash of `.agentbox` config in image label
-- Store hash of each module version in image label
-- Store hash of base Dockerfile in image label
-- Compare all hashes on startup
+**Image Label Format:**
+```
+agentbox.config.hash=<sha256-of-.agentbox>
+agentbox.base.hash=<sha256-of-Dockerfile.base>
+agentbox.module.<name>.<version>.hash=<sha256-of-module-files>
+```
+
+**Tracking Logic:**
+- Store hash of `.agentbox` config in label `agentbox.config.hash`
+- Store hash of each module's combined files in `agentbox.module.<name>.<version>.hash`
+- Store hash of base Dockerfile in `agentbox.base.hash`
+- Compare all hashes on startup; rebuild if any mismatch
 
 ### Phase 5: Runtime Configuration
 
@@ -164,9 +228,12 @@ run_container()
 
 **Logic:**
 1. Load mounts from each module's `.mounts` file
-2. Expand `~` to `$HOME`
-3. Add to mount_opts array
-4. Create host directories if needed
+2. Validate each mount path with `validate_mount_path()` (security)
+3. Expand `~` to `$HOME`
+4. Check if host path exists; if directory missing, attempt create
+5. Handle creation failures gracefully (permission errors)
+6. Verify host path is directory, not file
+7. Add validated mounts to mount_opts array
 
 #### 5.2 Module Environment Variables
 
@@ -180,7 +247,9 @@ run_container()
 **Logic:**
 1. Load environment from each module's `.env` file
 2. Parse `VAR=value` format
-3. Add `--env` flags to docker run command
+3. Validate each variable with `validate_env_var()` (security)
+4. Reject blacklisted variables (LD_PRELOAD, DOCKER_HOST, etc.)
+5. Add validated variables to `--env` flags for docker run command
 
 ### Phase 6: Initial Module Set
 
@@ -276,10 +345,48 @@ validate_config()  # Check YAML syntax, module format
 ```
 
 **Checks:**
-- Valid YAML syntax
+- Valid YAML syntax (prevent parser exploits)
 - `modules:` key exists
 - Module names follow `name:version` or `name` format
+- Module names pass `validate_module_name()` security check
 - No duplicate modules
+- Reject malformed structures
+
+#### 7.3 Docker Build Error Handling
+
+Improve Docker build failure messages:
+
+**Function:**
+```bash
+parse_docker_error()  # Extract actionable error from Docker output
+```
+
+**Improvements:**
+- Capture full Docker build output
+- Extract specific failure line/command from multi-stage output
+- Surface root cause, not just "build failed"
+- Suggest common fixes for known issues
+
+#### 7.4 Security Validation Errors
+
+Clear messages for security violations:
+
+**Error Examples:**
+```
+Error: Insecure mount path in module nodejs:20
+Path: /etc/passwd:/container/etc/passwd
+Reason: Absolute paths outside user home are not allowed
+
+Allowed prefixes: ~/.cache, ~/.config, ~/.npm, ~/.m2, ~/.gradle, ~/.cargo
+```
+
+```
+Error: Blocked environment variable in module custom:1
+Variable: LD_PRELOAD=/malicious/lib.so
+Reason: LD_PRELOAD is blacklisted for security
+
+Blocked variables: LD_PRELOAD, LD_LIBRARY_PATH, DOCKER_HOST, DOCKER_TLS_VERIFY
+```
 
 ### Phase 8: Documentation
 
@@ -296,8 +403,15 @@ Add sections:
 Create `docs/plugins/module-development.md`:
 - Module file format specification
 - Best practices for writing modules
+- Security guidelines for custom modules
 - Testing modules
 - Contributing modules to agentbox
+
+**Security Documentation:**
+- Warn users that custom modules in `~/.agentbox/modules/` execute arbitrary code
+- Document mount path restrictions and allowed prefixes
+- Document environment variable blacklist
+- Explain that modules are trusted code (like installing packages)
 
 #### 8.3 Migration Guide
 
@@ -308,23 +422,24 @@ Create `docs/plugins/migration.md`:
 
 ## Implementation Order
 
-### Milestone 1: Core Infrastructure (Week 1)
+### Milestone 1: Security & Core Infrastructure
+- Phase 0: Security and Validation Layer (0.1, 0.2)
 - Phase 1: Module Infrastructure (1.1, 1.2)
 - Phase 2: Configuration System (2.1, 2.2)
 - Basic testing with hardcoded module
 
-### Milestone 2: Dynamic Building (Week 2)
+### Milestone 2: Dynamic Building
 - Phase 3: Dynamic Image Building (3.1, 3.2, 3.3)
 - Phase 4: Rebuild Detection (4.1)
 - Test with single module
 
-### Milestone 3: Runtime & Modules (Week 3)
+### Milestone 3: Runtime & Modules
 - Phase 5: Runtime Configuration (5.1, 5.2)
 - Phase 6: Initial Module Set (6.1)
 - Integration testing
 
-### Milestone 4: Polish & Docs (Week 4)
-- Phase 7: Error Handling (7.1, 7.2)
+### Milestone 4: Error Handling & Documentation
+- Phase 7: Error Handling (7.1, 7.2, 7.3, 7.4)
 - Phase 8: Documentation (8.1, 8.2, 8.3)
 - User acceptance testing
 
@@ -335,6 +450,7 @@ Create `docs/plugins/migration.md`:
 - Config file parsing
 - Path resolution
 - Hash calculation
+- Security validation functions (mount paths, env vars, module names)
 
 ### Integration Tests
 - Build image with nodejs:20 module
@@ -343,6 +459,14 @@ Create `docs/plugins/migration.md`:
 - Verify mounts work correctly
 - Verify environment variables applied
 
+### Security Tests
+- Reject malicious mount paths (`/etc/passwd`, `../../../etc`)
+- Reject path traversal in module names (`../../malicious`)
+- Reject sensitive environment variables (`LD_PRELOAD`)
+- Reject absolute paths outside home in mounts
+- Handle missing file permissions gracefully
+- Verify built-in modules pass security validation
+
 ### Edge Cases
 - Missing module
 - Invalid YAML syntax
@@ -350,6 +474,9 @@ Create `docs/plugins/migration.md`:
 - Module without mounts/env
 - Empty .agentbox file
 - No .agentbox file (fallback to base image)
+- Host mount directory exists but is a file
+- Host mount directory creation fails (permissions)
+- Corrupt module file (partial download)
 
 ## Rollback Strategy
 
@@ -399,6 +526,30 @@ After stable release:
 
 ### Risk: Module conflicts
 **Mitigation:** Let Docker fail fast, surface clear error to user
+
+### Risk: Malicious custom modules
+**Severity:** High (arbitrary code execution)
+**Mitigation:** 
+- Document that custom modules are trusted code
+- Implement security validation for mounts and env vars
+- Whitelist mount path prefixes
+- Blacklist dangerous environment variables
+- Cannot prevent malicious Dockerfile instructions (by design)
+- Users responsible for auditing custom modules
+
+### Risk: Path traversal attacks
+**Severity:** Medium
+**Mitigation:**
+- Validate all module names (no `..` or `/`)
+- Validate all mount paths (no `..`, restricted to home)
+- Sanitize all user-provided paths
+
+### Risk: Hash collision
+**Severity:** Low (8-char hash = 1 in 4 billion)
+**Mitigation:**
+- Document the risk
+- Use SHA-256 for quality hash distribution
+- Consider extending to 12 chars if collisions occur in practice
 
 ## Future Enhancements (Out of Scope)
 
