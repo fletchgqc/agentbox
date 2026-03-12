@@ -118,20 +118,20 @@ agentbox ssh-init
 
 ## Module System
 
-AgentBox uses a modular system where projects specify required development tools via a `.agentbox` configuration file. Each project gets a custom-built image with only the needed modules.
+AgentBox uses a modular system where projects specify required development tools via a `.agentbox/config.txt` configuration file. Each project gets a custom-built image with only the needed modules.
 
 ### Using Modules
 
-Create a `.agentbox` file in your project root:
+Create a `.agentbox/config.txt` file in your project:
 
-```yaml
-modules:
-  - nodejs:20
-  - java:17
-  - rust
+```
+# One module per line, format: name or name:version
+nodejs:20
+java:17
+rust
 ```
 
-AgentBox will automatically search upward from your current directory (like `.git`) to find the configuration.
+AgentBox will automatically search upward from your current directory (like `.git`) to find the `.agentbox` directory.
 
 ### Available Modules
 
@@ -149,7 +149,7 @@ agentbox modules list nodejs
 ### Built-in Modules
 
 - **nodejs:20, nodejs:22** - Node.js via nvm with global packages (typescript, eslint, prettier, yarn, pnpm)
-- **java:17, java:21** - Java via SDKMAN with Gradle and Maven
+- **java:17, java:21, java:25** - Java via SDKMAN with Gradle and Maven
 - **rust** - Rust via rustup (version managed by rustup itself)
 
 ### Module Capabilities
@@ -161,7 +161,7 @@ Each module can specify:
 
 ### No-Config Fallback
 
-If no `.agentbox` file is found, AgentBox builds a base image with:
+If no `.agentbox/config.txt` file is found, AgentBox builds a base image with:
 - Essential tools (git, vim, curl, jq, yq, etc.)
 - Build tools (gcc, make, cmake)
 - Python with uv
@@ -169,19 +169,42 @@ If no `.agentbox` file is found, AgentBox builds a base image with:
 
 This lets you use AgentBox immediately without configuration.
 
-### Custom Modules
+### Project-Local Modules
 
-Create custom modules in `~/.agentbox/modules/`:
+Projects can include custom modules in their repository:
 
 ```
-~/.agentbox/modules/
-  mymodule/
-    1.0.dockerfile
-    1.0.mounts
-    1.0.env
+myproject/
+  .agentbox/
+    config.txt           # Module configuration
+    modules/             # Project-specific modules
+      kotlin-lsp/
+        dockerfile
+        env
 ```
+
+Modules are searched in this order:
+1. `.agentbox/modules/` (project-specific, version-controlled)
+2. `~/.agentbox/modules/` (user custom modules)
+3. Built-in modules
 
 See [docs/plugins/module-format.md](docs/plugins/module-format.md) for the module specification.
+
+### Example: Java 25 Project with Kotlin LSP
+
+The `module-example/` directory contains a complete example project configuration:
+
+```
+module-example/
+  .agentbox/
+    config.txt          # Lists: java:25, kotlin-lsp
+    modules/
+      kotlin-lsp/       # Custom module for Kotlin Language Server
+        dockerfile
+        env
+```
+
+Copy this to your Java project to get started with Java 25 and Kotlin LSP support.
 
 ## How It Works
 

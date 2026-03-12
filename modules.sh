@@ -16,12 +16,44 @@ parse_module_spec() {
     fi
 }
 
+# Initialize AGENTBOX_CONFIG_DIR based on found config file
+init_config_dir() {
+    local config_file
+    if ! config_file=$(find_agentbox_config 2>/dev/null); then
+        unset AGENTBOX_CONFIG_DIR
+        return 1
+    fi
+
+    # Set config directory for module search paths
+    # If config is .agentbox/config or .agentbox/config.yaml, use parent dir
+    # If config is legacy .agentbox file, use its directory
+    local config_dir="$(dirname "$config_file")"
+    if [[ "$(basename "$config_dir")" == ".agentbox" ]]; then
+        export AGENTBOX_CONFIG_DIR="$(dirname "$config_dir")"
+    else
+        export AGENTBOX_CONFIG_DIR="$config_dir"
+    fi
+    return 0
+}
+
 # Module directory search paths
 get_module_search_paths() {
-    local paths=(
-        "${HOME}/.agentbox/modules"
-        "${SCRIPT_DIR}/modules"
-    )
+    # Ensure config dir is initialized
+    init_config_dir 2>/dev/null || true
+
+    local paths=()
+
+    # Project-local modules (if .agentbox config found)
+    if [[ -n "${AGENTBOX_CONFIG_DIR:-}" ]]; then
+        paths+=("${AGENTBOX_CONFIG_DIR}/.agentbox/modules")
+    fi
+
+    # User modules
+    paths+=("${HOME}/.agentbox/modules")
+
+    # Built-in modules
+    paths+=("${SCRIPT_DIR}/modules")
+
     echo "${paths[@]}"
 }
 
@@ -456,15 +488,23 @@ load_module_env() {
 # Find .agentbox config file by searching upward
 find_agentbox_config() {
     local search_dir="$PROJECT_DIR"
-    
+
     while [[ "$search_dir" != "/" ]]; do
-        if [[ -f "${search_dir}/.agentbox" ]]; then
+        # Look for .agentbox/config.txt
+        if [[ -f "${search_dir}/.agentbox/config.txt" ]]; then
+            echo "${search_dir}/.agentbox/config.txt"
+            return 0
+        # Legacy: also support old formats
+        elif [[ -f "${search_dir}/.agentbox/config" ]]; then
+            echo "${search_dir}/.agentbox/config"
+            return 0
+        elif [[ -f "${search_dir}/.agentbox" ]]; then
             echo "${search_dir}/.agentbox"
             return 0
         fi
         search_dir=$(dirname "$search_dir")
     done
-    
+
     # Not found
     return 1
 }
@@ -472,65 +512,49 @@ find_agentbox_config() {
 # Parse .agentbox config file and extract modules
 parse_agentbox_config() {
     local config_file="$1"
-    
+
     # Check if file exists and is readable
     if [[ ! -f "$config_file" ]] || [[ ! -r "$config_file" ]]; then
         log_error "Config file not readable: $config_file"
         return 1
     fi
-    
-    # Use yq to parse YAML
-    if ! command -v yq &>/dev/null; then
-        log_error "yq not found. Required for parsing .agentbox config."
-        return 1
-    fi
-    
-    # Validate YAML syntax
-    if ! yq eval . "$config_file" &>/dev/null; then
-        log_error "Invalid YAML syntax in $config_file"
-        return 1
-    fi
-    
-    # Extract modules array
-    local modules_json
-    modules_json=$(yq eval '.modules // []' -o json "$config_file" 2>/dev/null)
-    
-    if [[ -z "$modules_json" ]] || [[ "$modules_json" == "null" ]] || [[ "$modules_json" == "[]" ]]; then
-        # No modules specified, return empty
-        return 0
-    fi
-    
-    # Parse JSON array and validate each module
+
+    # Parse config file - simple line-based format
+    # Each line is a module spec, empty lines and comments (#) are ignored
     local modules=()
     local seen_modules=()
-    
-    while IFS= read -r module_spec; do
-        # Skip empty
-        [[ -z "$module_spec" ]] && continue
-        
+
+    while IFS= read -r line; do
+        # Trim whitespace
+        line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+        # Skip empty lines and comments
+        [[ -z "$line" ]] && continue
+        [[ "$line" =~ ^# ]] && continue
+
         # Normalize to lowercase
-        module_spec="${module_spec,,}"
-        
+        local module_spec="${line,,}"
+
         # Parse and validate module name
         local module_name
         read module_name _ < <(parse_module_spec "$module_spec")
-        
+
         # Validate module name
         if ! validate_module_name "$module_name"; then
             log_error "Invalid module name in config: $module_spec"
             return 1
         fi
-        
+
         # Check for duplicates
         if [[ " ${seen_modules[*]} " =~ " ${module_spec} " ]]; then
-            log_error "Duplicate module in .agentbox: $module_spec"
+            log_error "Duplicate module in config: $module_spec"
             return 1
         fi
-        
+
         seen_modules+=("$module_spec")
         modules+=("$module_spec")
-    done < <(echo "$modules_json" | jq -r '.[]' 2>/dev/null)
-    
+    done < "$config_file"
+
     # Output modules one per line
     printf '%s\n' "${modules[@]}"
 }
@@ -538,13 +562,16 @@ parse_agentbox_config() {
 # Get modules list from config or empty for base-only
 get_modules_list() {
     local config_file
-    
-    # Try to find config file
-    if ! config_file=$(find_agentbox_config); then
+
+    # Initialize config directory
+    local config_file
+    if ! init_config_dir; then
         # No config found, use base image only
         return 0
     fi
-    
+
+    # Get config file path again for logging
+    config_file=$(find_agentbox_config)
     log_info "Found config: $config_file"
     
     # Parse config file

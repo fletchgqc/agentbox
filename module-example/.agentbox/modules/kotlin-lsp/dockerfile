@@ -1,0 +1,8 @@
+# Install Kotlin Language Server
+RUN KOTLIN_LSP_VERSION=$(curl -s https://api.github.com/repos/fwcd/kotlin-language-server/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/') && \
+    mkdir -p /home/agent/.local/share/kotlin-language-server && \
+    cd /home/agent/.local/share/kotlin-language-server && \
+    curl -L "https://github.com/fwcd/kotlin-language-server/releases/download/${KOTLIN_LSP_VERSION}/server.zip" -o server.zip && \
+    unzip -q server.zip && \
+    rm server.zip && \
+    chmod +x server/bin/kotlin-language-server

@@ -588,14 +588,17 @@ Commands:
     Other commands will be executed inside the container.
 
 Module System:
-    Create a .agentbox file in your project to specify development tools:
-    
-    modules:
-      - nodejs:20
-      - java:17
-      - rust
-    
-    Modules are loaded from ~/.agentbox/modules/ or built-in modules.
+    Create a .agentbox/config.txt file in your project to specify development tools:
+
+    # One module per line
+    nodejs:20
+    java:17
+    rust
+
+    Modules are loaded from:
+      1. .agentbox/modules/ (project-specific)
+      2. ~/.agentbox/modules/ (user custom)
+      3. Built-in modules
     Each project gets a custom image with only the requested modules.
 
 Examples:
