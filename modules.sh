@@ -65,19 +65,36 @@ validate_module_directory() {
 validate_mount_path() {
     local mount_spec="$1"
     local host_path container_path
-    
+
     # Parse host:container
     IFS=: read -r host_path container_path <<< "$mount_spec"
-    
-    # Expand tilde
-    host_path="${host_path/#\~/$HOME}"
-    
-    # Check for path traversal
-    if [[ "$host_path" =~ \.\. ]]; then
-        log_error "Path traversal not allowed in mount: $host_path"
+
+    # Validate mount spec format
+    if [[ -z "$host_path" ]] || [[ -z "$container_path" ]]; then
+        log_error "Invalid mount specification (must be host:container): $mount_spec"
         return 1
     fi
-    
+
+    # Expand tilde in host path
+    host_path="${host_path/#\~/$HOME}"
+
+    # Check for path traversal in both paths
+    if [[ "$host_path" =~ \.\. ]]; then
+        log_error "Path traversal not allowed in host mount path: $host_path"
+        return 1
+    fi
+
+    if [[ "$container_path" =~ \.\. ]]; then
+        log_error "Path traversal not allowed in container mount path: $container_path"
+        return 1
+    fi
+
+    # Container path must be absolute
+    if [[ ! "$container_path" =~ ^/ ]]; then
+        log_error "Container mount path must be absolute: $container_path"
+        return 1
+    fi
+
     # Must start with whitelisted prefixes
     local allowed_prefixes=(
         "${HOME}/.cache"
@@ -90,7 +107,7 @@ validate_mount_path() {
         "${HOME}/.sdkman"
         "${HOME}/.nvm"
     )
-    
+
     local allowed=false
     for prefix in "${allowed_prefixes[@]}"; do
         if [[ "$host_path" == "$prefix"* ]]; then
@@ -98,29 +115,51 @@ validate_mount_path() {
             break
         fi
     done
-    
+
     if [[ "$allowed" == "false" ]]; then
-        log_error "Mount path not in whitelist: $host_path"
+        log_error "Host mount path not in whitelist: $host_path"
         log_error "Allowed prefixes: ~/.cache, ~/.config, ~/.npm, ~/.m2, ~/.gradle, ~/.cargo, ~/.rustup, ~/.sdkman, ~/.nvm"
         return 1
     fi
-    
-    # Check blacklist
+
+    # Check blacklist for both host and container paths
     local blacklist=(
         "/var/run/docker.sock"
+        "/var/run"
         "/etc"
         "/sys"
         "/proc"
         "/dev"
+        "/bin"
+        "/sbin"
+        "/usr/bin"
+        "/usr/sbin"
+        "/lib"
+        "/lib64"
+        "/boot"
+        "/root"
     )
-    
+
     for blocked in "${blacklist[@]}"; do
-        if [[ "$host_path" == "$blocked"* ]] || [[ "$container_path" == "$blocked"* ]]; then
-            log_error "Blocked mount path: $mount_spec"
+        if [[ "$host_path" == "$blocked"* ]]; then
+            log_error "Blocked host mount path: $host_path"
+            log_error "Cannot mount system directories"
+            return 1
+        fi
+        if [[ "$container_path" == "$blocked"* ]]; then
+            log_error "Blocked container mount path: $container_path"
+            log_error "Cannot mount to system directories in container"
             return 1
         fi
     done
-    
+
+    # Container path must be in /home/agent/ for safety
+    if [[ ! "$container_path" =~ ^/home/agent/ ]]; then
+        log_error "Container mount path must be in /home/agent/: $container_path"
+        log_error "Mounting outside user home is not allowed"
+        return 1
+    fi
+
     return 0
 }
 
