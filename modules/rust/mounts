@@ -1,2 +1,2 @@
-~/.cargo:/home/agent/.cargo
-~/.rustup:/home/agent/.rustup
+~/.cargo/registry:/home/agent/.cargo/registry
+~/.cargo/git:/home/agent/.cargo/git

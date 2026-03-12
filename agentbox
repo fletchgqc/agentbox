@@ -488,9 +488,9 @@ run_container() {
         container_cmd=(zsh -c "source ~/.zshrc && exec $tool_cmd")
     fi
 
+    local agentbox_env="${HOME}/.agentbox/.env"
     local env_file_args=()
     if [[ "$ignore_dot_env" != "true" ]]; then
-        local agentbox_env="${HOME}/.agentbox/.env"
         if [[ -f "$agentbox_env" ]]; then
             env_file_args+=(--env-file "$agentbox_env")
             log_info "Global .env loaded from ~/.agentbox/.env"
@@ -503,54 +503,6 @@ run_container() {
     else
         log_info ".env files not loaded (--ignore-dot-env flag set)"
     fi
-    
-    # Add module-specific environment variables
-    declare -A module_env_vars
-    local merged_path=""
-    
-    if [[ -n "$modules_list" ]]; then
-        while IFS= read -r module_spec; do
-            [[ -z "$module_spec" ]] && continue
-            
-            # Load module environment variables
-            local module_env
-            if module_env=$(load_module_env "$module_spec" 2>/dev/null); then
-                while IFS= read -r env_spec; do
-                    [[ -z "$env_spec" ]] && continue
-                    
-                    # Parse VAR=value
-                    local var_name var_value
-                    IFS== read -r var_name var_value <<< "$env_spec"
-                    
-                    # Handle PATH specially - merge all module PATHs
-                    if [[ "$var_name" == "PATH" ]]; then
-                        # Extract prepend portion (everything before :$PATH)
-                        if [[ "$var_value" =~ ^(.+):?\$PATH$ ]]; then
-                            local path_prepend="${BASH_REMATCH[1]}"
-                            if [[ -n "$merged_path" ]]; then
-                                merged_path="${merged_path}:${path_prepend}"
-                            else
-                                merged_path="$path_prepend"
-                            fi
-                        fi
-                    else
-                        # Store non-PATH variables
-                        module_env_vars["$var_name"]="$var_value"
-                    fi
-                done <<< "$module_env"
-            fi
-        done <<< "$modules_list"
-    fi
-    
-    # Add merged PATH if any modules defined it
-    if [[ -n "$merged_path" ]]; then
-        mount_opts+=(--env "PATH=${merged_path}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-    fi
-    
-    # Add other module environment variables
-    for var_name in "${!module_env_vars[@]}"; do
-        mount_opts+=(--env "${var_name}=${module_env_vars[$var_name]}")
-    done
 
     # Build extra host entries from AGENTBOX_EXTRA_HOSTS
     local host_args=()

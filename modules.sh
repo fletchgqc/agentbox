@@ -535,29 +535,43 @@ get_modules_list() {
 generate_dockerfile() {
     local modules_list="$1"
     local output_file="$2"
-    
+
     cat "$DOCKERFILE_BASE" > "$output_file"
-    
+
     # If no modules, we're done
     if [[ -z "$modules_list" ]]; then
         return 0
     fi
-    
+
     # Add each module's dockerfile content
     while IFS= read -r module_spec; do
         [[ -z "$module_spec" ]] && continue
-        
+
         echo "" >> "$output_file"
         echo "# Module: $module_spec" >> "$output_file"
-        
+
         if ! module_content=$(load_module_dockerfile "$module_spec"); then
             log_error "Failed to load module: $module_spec"
             return 1
         fi
-        
+
         echo "$module_content" >> "$output_file"
+
+        # Load module environment variables and emit as ENV instructions
+        local module_env
+        if module_env=$(load_module_env "$module_spec" 2>/dev/null); then
+            while IFS= read -r env_spec; do
+                [[ -z "$env_spec" ]] && continue
+
+                # Parse VAR=value
+                local var_name var_value
+                IFS== read -r var_name var_value <<< "$env_spec"
+
+                echo "ENV ${var_name}=${var_value}" >> "$output_file"
+            done <<< "$module_env"
+        fi
     done <<< "$modules_list"
-    
+
     return 0
 }
 
