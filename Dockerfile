@@ -134,6 +134,7 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
     echo 'export PATH="$DOTNET_ROOT:$DOTNET_ROOT/tools:$PATH"' >> ~/.bashrc && \
     echo 'export DOTNET_ROOT="$HOME/.dotnet"' >> ~/.zshrc && \
     echo 'export PATH="$DOTNET_ROOT:$DOTNET_ROOT/tools:$PATH"' >> ~/.zshrc && \
+    mkdir -p /home/${USERNAME}/.nuget && \
     dotnet --list-sdks
 
 # Setup Python tools
