@@ -1,0 +1,2 @@
+EDITOR=nvim
+VISUAL=nvim
