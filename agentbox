@@ -599,6 +599,14 @@ main() {
                 force_rebuild=true
                 shift
                 ;;
+            --docker)
+                docker_mount=true
+                shift
+                ;;
+            --ignore-dot-env)
+                ignore_dot_env=true
+                shift
+                ;;
             -p)
                 shift
                 if [[ -z "${1:-}" ]]; then
@@ -695,12 +703,12 @@ main() {
     # Run or attach to container
     if [[ "$shell_mode" == "true" ]]; then
         if [[ "$admin_mode" == "true" ]]; then
-            run_container "$container_name" validated_dirs "$tool" "shell" "--admin" "${cmd_args[@]}"
+            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "shell" "--admin" "${cmd_args[@]}"
         else
-            run_container "$container_name" validated_dirs "$tool" "shell" "${cmd_args[@]}"
+            run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "shell" "${cmd_args[@]}"
         fi
     else
-        run_container "$container_name" validated_dirs "$tool" "${cmd_args[@]}"
+        run_container "$container_name" validated_dirs "$tool" "$ignore_dot_env" "$docker_mount" "${cmd_args[@]}"
     fi
 }
 
