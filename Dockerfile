@@ -215,7 +215,7 @@ USER ${USERNAME}
 # Dockerfile hasn't changed. This ensures fresh installs on explicit rebuilds instead
 # of relying on unpredictable auto-update timing.
 ARG BUILD_TIMESTAMP=unknown
-RUN curl -fsSL https://claude.ai/install.sh | bash -s stable && \
+RUN curl -fsSL https://claude.ai/install.sh | bash -s latest && \
     zsh -i -c 'which claude && claude --version'
 
 RUN curl -fsSL https://opencode.ai/install | bash && \
