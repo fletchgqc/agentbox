@@ -54,7 +54,7 @@ agentbox --help
 
 - claude code: built-in
 - opencode: built-in
-- pi: built-in (opt-in via AGENTBOX_TOOL=pi)
+- pi: built-in (opt-in via `--tool pi`; requires `ANTHROPIC_API_KEY` in `.env`)
 - any other agents (copilot CLI, Aider, Cursor CLI...): easily add it yourself using the prompt at [docs/prompts/add-tool.md](docs/prompts/add-tool.md).
 
 ### Adding tools
@@ -90,7 +90,7 @@ agentbox
 # Use OpenCode instead of Claude
 agentbox --tool opencode
 
-# Use Pi instead of Claude (requires AGENTBOX_TOOL=pi in config first)
+# Use Pi instead of Claude (requires ANTHROPIC_API_KEY in .env)
 agentbox --tool pi
 
 # Or set via environment variable
@@ -235,7 +235,8 @@ Both tools use bind mounts to share authentication across all AgentBox projects:
 - Auth: `~/.local/share/opencode` mounted at `/home/agent/.local/share/opencode`
 
 **Pi**:
-- `~/.pi` mounted at `/home/agent/.pi`
+- Config: `~/.pi` mounted at `/home/agent/.pi`
+- Auth: Requires `ANTHROPIC_API_KEY` in `~/.agentbox/.env` or project `.env`
 
 ## Advanced Usage
 
