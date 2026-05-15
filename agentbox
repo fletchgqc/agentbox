@@ -358,6 +358,16 @@ run_container() {
         )
 
         log_info "OpenCode configuration and auth mounted"
+    elif [[ "$tool" == "copilot" ]]; then
+        local copilot_config_dir="${HOME}/.copilot"
+
+        mkdir -p "$copilot_config_dir"
+
+        mount_opts+=(
+            -v "${copilot_config_dir}:/home/agent/.copilot"
+        )
+
+        log_info "GitHub Copilot configuration mounted"
     else
         local claude_dir="${HOME}/.claude"
 
@@ -396,6 +406,8 @@ run_container() {
         local tool_cmd
         if [[ "$tool" == "opencode" ]]; then
             tool_cmd="opencode"
+        elif [[ "$tool" == "copilot" ]]; then
+            tool_cmd="copilot --allow-all-tools"
         else
             tool_cmd="claude --dangerously-skip-permissions"
         fi
@@ -519,7 +531,7 @@ Examples:
     agentbox python script.py             # Run Python script in container
     agentbox --rebuild                    # Force rebuild image
     agentbox ssh-init                     # Set up SSH for AgentBox
-    AGENTBOX_TOOL=opencode agentbox       # Use env var to select tool
+    AGENTBOX_TOOL=opencode agentbox copilot       # Use env var to select tool
 
 Environment variables (set in ~/.agentbox/.env):
     AGENTBOX_EXTRA_HOSTS    Comma-separated host:ip pairs added to container /etc/hosts
@@ -618,7 +630,7 @@ main() {
             --tool)
                 shift
                 if [[ -z "${1:-}" ]]; then
-                    log_error "--tool requires a value (claude or opencode)"
+                    log_error "--tool requires a value (claude, opencode or copilot)"
                     exit 1
                 fi
                 tool="$1"
@@ -652,8 +664,8 @@ main() {
     done
 
     # Validate tool selection
-    if [[ "$tool" != "claude" && "$tool" != "opencode" ]]; then
-        log_error "Invalid tool: $tool (must be 'claude' or 'opencode')"
+    if [[ "$tool" != "claude" && "$tool" != "opencode" && "$tool" != "copilot" ]]; then
+        log_error "Invalid tool: $tool (must be 'claude', 'opencode' or 'copilot')"
         exit 1
     fi
 
