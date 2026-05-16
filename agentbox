@@ -360,14 +360,17 @@ run_container() {
         log_info "OpenCode configuration and auth mounted"
     elif [[ "$tool" == "copilot" ]]; then
         local copilot_config_dir="${HOME}/.copilot"
+        local copilot_cache_dir="${HOME}/.cache/copilot"
 
         mkdir -p "$copilot_config_dir"
+        mkdir -p "$copilot_cache_dir"
 
         mount_opts+=(
             -v "${copilot_config_dir}:/home/agent/.copilot"
+            -v "${copilot_cache_dir}:/home/agent/.cache/copilot"
         )
 
-        log_info "GitHub Copilot configuration mounted"
+        log_info "GitHub Copilot configuration and cache mounted"
     else
         local claude_dir="${HOME}/.claude"
 
