@@ -121,7 +121,8 @@ RUN bash -c "source $NVM_DIR/nvm.sh && \
         prettier \
         nodemon \
         yarn \
-        pnpm"
+        pnpm \
+        bun"
 
 # Install SDKMAN for Java toolchain management
 RUN curl -s "https://get.sdkman.io?rcupdate=false" | bash && \
