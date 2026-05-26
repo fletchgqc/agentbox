@@ -579,8 +579,6 @@ Options:
 Commands:
     shell [--admin]             Start interactive shell instead of Claude CLI
     ssh-init                    Initialize SSH directory for AgentBox
-    modules list [name]         List all available modules (optionally filter by name)
-    modules info <name>         Show details for a specific module
 
     If no command is provided, Claude CLI will be started automatically.
     Use 'shell' command to get a shell instead of Claude CLI.
@@ -612,9 +610,6 @@ Examples:
     agentbox python script.py             # Run Python script in container
     agentbox --rebuild                    # Force rebuild image
     agentbox ssh-init                     # Set up SSH for AgentBox
-    agentbox modules list                 # Show all available modules
-    agentbox modules list nodejs          # Show Node.js module versions
-    agentbox modules info nodejs:20       # Show details for Node.js 20 module
     AGENTBOX_TOOL=opencode agentbox       # Use env var to select tool
 
 Environment variables (set in ~/.agentbox/.env):
@@ -631,158 +626,7 @@ Container Runtime:
 EOF
 }
 
-# List available modules
-cmd_modules_list() {
-    local filter_name="$1"
-    
-    local search_paths
-    read -ra search_paths <<< "$(get_module_search_paths)"
-    
-    # Collect all modules
-    declare -A modules_map
-    
-    for base_path in "${search_paths[@]}"; do
-        if [[ ! -d "$base_path" ]]; then
-            continue
-        fi
-        
-        # Find all module directories
-        for module_dir in "$base_path"/*; do
-            [[ ! -d "$module_dir" ]] && continue
-            
-            local module_name=$(basename "$module_dir")
-            
-            # Apply filter if specified
-            if [[ -n "$filter_name" ]] && [[ "$module_name" != "$filter_name" ]]; then
-                continue
-            fi
-            
-            # Find all versions
-            local versions=()
-            for dockerfile in "$module_dir"/*.dockerfile "$module_dir"/dockerfile; do
-                [[ ! -f "$dockerfile" ]] && continue
-                
-                local basename
-                basename=$(basename "$dockerfile")
-                if [[ "$basename" == "dockerfile" ]]; then
-                    versions+=("versionless")
-                else
-                    local version="${basename%.dockerfile}"
-                    versions+=("$version")
-                fi
-            done
-            
-            # Store versions (use newline as delimiter)
-            if [[ ${#versions[@]} -gt 0 ]]; then
-                if [[ -n "${modules_map[$module_name]:-}" ]]; then
-                    # Merge versions
-                    local IFS=$'\n'
-                    modules_map[$module_name]="${modules_map[$module_name]}"$'\n'"${versions[*]}"
-                else
-                    local IFS=$'\n'
-                    modules_map[$module_name]="${versions[*]}"
-                fi
-            fi
-        done
-    done
-    
-    # Display results
-    if [[ ${#modules_map[@]} -eq 0 ]]; then
-        if [[ -n "$filter_name" ]]; then
-            echo "No modules found matching: $filter_name"
-        else
-            echo "No modules found."
-        fi
-        return 1
-    fi
-    
-    echo "Available modules:"
-    echo ""
-    
-    for module_name in $(printf '%s\n' "${!modules_map[@]}" | sort); do
-        echo "${module_name}:"
-        # Print versions, deduplicated and sorted
-        local versions="${modules_map[$module_name]}"
-        echo "$versions" | sort -u | sed 's/^/  - /'
-    done
-}
 
-# Show details for a specific module
-cmd_modules_info() {
-    local module_spec="$1"
-    
-    if [[ -z "$module_spec" ]]; then
-        log_error "Module name required. Usage: agentbox modules info <module:version>"
-        return 1
-    fi
-    
-    # Find module
-    local module_dir
-    if ! module_dir=$(find_module "$module_spec"); then
-        show_module_error "$module_spec"
-        return 1
-    fi
-    
-    # Parse module spec
-    local module_name module_version
-    if [[ "$module_spec" =~ : ]]; then
-        IFS=: read -r module_name module_version <<< "$module_spec"
-    else
-        module_name="$module_spec"
-        module_version=""
-    fi
-    
-    # Determine file names
-    local dockerfile_name mounts_name env_name
-    if [[ -n "$module_version" ]]; then
-        dockerfile_name="${module_version}.dockerfile"
-        mounts_name="${module_version}.mounts"
-        env_name="${module_version}.env"
-    else
-        dockerfile_name="dockerfile"
-        mounts_name="mounts"
-        env_name="env"
-    fi
-    
-    echo "Module: $module_spec"
-    echo "Location: ${module_dir}/${dockerfile_name}"
-    echo ""
-    
-    # Show mounts
-    local mounts_path="${module_dir}/${mounts_name}"
-    if [[ -f "$mounts_path" ]]; then
-        echo "Mounts:"
-        while IFS= read -r mount_spec; do
-            [[ -z "$mount_spec" ]] && continue
-            [[ "$mount_spec" =~ ^[[:space:]]*# ]] && continue
-            echo "  $mount_spec"
-        done < "$mounts_path"
-        echo ""
-    fi
-    
-    # Show environment
-    local env_path="${module_dir}/${env_name}"
-    if [[ -f "$env_path" ]]; then
-        echo "Environment:"
-        while IFS= read -r env_spec; do
-            [[ -z "$env_spec" ]] && continue
-            [[ "$env_spec" =~ ^[[:space:]]*# ]] && continue
-            echo "  $env_spec"
-        done < "$env_path"
-        echo ""
-    fi
-    
-    # Show excerpt from dockerfile
-    local dockerfile_path="${module_dir}/${dockerfile_name}"
-    if [[ -f "$dockerfile_path" ]]; then
-        echo "Installation (excerpt):"
-        head -5 "$dockerfile_path" | sed 's/^/  /'
-        local line_count=$(wc -l < "$dockerfile_path")
-        if [[ $line_count -gt 5 ]]; then
-            echo "  ... (${line_count} lines total)"
-        fi
-    fi
-}
 
 # Set up dedicated SSH directory for AgentBox
 ssh_setup() {
@@ -893,38 +737,7 @@ main() {
                 ssh_setup
                 exit 0
                 ;;
-            modules)
-                shift
-                if [[ $# -eq 0 ]]; then
-                    log_error "modules command requires a subcommand"
-                    echo "Usage: agentbox modules <list|info> [args]"
-                    exit 1
-                fi
-                
-                local subcmd="$1"
-                shift
-                
-                case "$subcmd" in
-                    list)
-                        cmd_modules_list "${1:-}"
-                        exit 0
-                        ;;
-                    info)
-                        if [[ $# -eq 0 ]]; then
-                            log_error "modules info requires a module name"
-                            echo "Usage: agentbox modules info <module:version>"
-                            exit 1
-                        fi
-                        cmd_modules_info "$1"
-                        exit 0
-                        ;;
-                    *)
-                        log_error "Unknown modules subcommand: $subcmd"
-                        echo "Available: list, info"
-                        exit 1
-                        ;;
-                esac
-                ;;
+
             *)
                 cmd_args+=("$1")
                 shift
