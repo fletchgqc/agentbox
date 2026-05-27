@@ -345,7 +345,7 @@ run_container() {
         --env "HISTFILE=/home/agent/.shell_history/zsh_history"
     )
 
-    if [[ "$tool" == "opencode" ]]; then
+    if [[ "$tool" == "opencode" || "$shell_mode" == "true" ]]; then
         local opencode_config_dir="${HOME}/.config/opencode"
         local opencode_auth_dir="${HOME}/.local/share/opencode"
 
@@ -358,7 +358,9 @@ run_container() {
         )
 
         log_info "OpenCode configuration and auth mounted"
-    else
+    fi
+
+    if [[ "$tool" == "claude" || "$shell_mode" == "true" ]]; then
         local claude_dir="${HOME}/.claude"
 
         mkdir -p "$claude_dir"
