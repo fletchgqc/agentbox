@@ -334,6 +334,16 @@ run_container() {
         -v "${cache_dir}/gradle:/home/agent/.gradle"
     )
 
+    # SDK version caches are shared across projects (versions are large, project-agnostic)
+    local nvm_versions_dir="${HOME}/.agentbox/nvm/versions"
+    local sdkman_candidates_dir="${HOME}/.agentbox/sdkman/candidates"
+    mkdir -p "$nvm_versions_dir" "$sdkman_candidates_dir"
+
+    mount_opts+=(
+        -v "${nvm_versions_dir}:/home/agent/.nvm/versions"
+        -v "${sdkman_candidates_dir}:/home/agent/.sdkman/candidates"
+    )
+
     # Mount per-project persistent data
     local project_data_dir="${HOME}/.agentbox/projects/${container_name}"
     local history_dir="${project_data_dir}/history"

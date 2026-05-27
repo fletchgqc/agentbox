@@ -141,14 +141,49 @@ RUN /home/${USERNAME}/.local/bin/uv tool install black && \
     /home/${USERNAME}/.local/bin/uv tool install pipenv
 
 # Install oh-my-zsh for better shell experience and setup NVM for zsh
+# oh-my-zsh installer replaces .zshrc, so all tool hooks are re-added after
 RUN sh -c "$(wget -O- https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended && \
     sed -i 's/ZSH_THEME=".*"/ZSH_THEME="robbyrussell"/' ~/.zshrc && \
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && \
     echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc && \
     echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.zshrc && \
-    echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.zshrc
+    echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> ~/.zshrc && \
+    echo 'source "$HOME/.sdkman/bin/sdkman-init.sh"' >> ~/.zshrc
 
-# Setup direnv hooks for automatic .envrc loading
+# NVM auto-use hook + SDKMAN auto-env hook with auto-install.
+# SDKMAN's built-in sdkman_auto_env=true only calls 'sdk env' (no install), which
+# prints "Stop! X is not installed" on stdout when the version is missing.
+# We implement our own chpwd hooks that call 'sdk env install' first.
+RUN cat >> ~/.zshrc <<'EOF'
+
+# Auto-use NVM version from .nvmrc on cd and shell startup
+autoload -U add-zsh-hook
+load-nvmrc() {
+    local nvmrc_path
+    nvmrc_path="$(nvm_find_nvmrc)"
+    if [[ -n "$nvmrc_path" ]]; then
+        local nvmrc_node_version
+        nvmrc_node_version=$(nvm version "$(cat "$nvmrc_path")")
+        if [[ "$nvmrc_node_version" = "N/A" ]]; then
+            nvm install
+        elif [[ "$nvmrc_node_version" != "$(nvm version)" ]]; then
+            nvm use --silent
+        fi
+    fi
+}
+add-zsh-hook chpwd load-nvmrc
+load-nvmrc
+
+# SDKMAN: install missing versions then activate, on cd and shell startup
+__sdk_auto_env() {
+    if [[ -f ".sdkmanrc" ]]; then
+        sdk env install 2>/dev/null || true
+        sdk env 2>/dev/null || true
+    fi
+}
+add-zsh-hook chpwd __sdk_auto_env
+__sdk_auto_env
+EOF
 RUN echo 'eval "$(direnv hook bash)"' >> ~/.bashrc && \
     echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc
 
