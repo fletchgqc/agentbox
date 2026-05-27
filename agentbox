@@ -533,9 +533,11 @@ Examples:
     agentbox ssh-init                     # Set up SSH for AgentBox
     AGENTBOX_TOOL=opencode agentbox       # Use env var to select tool
 
-Environment variables (set in ~/.agentbox/.env):
-    AGENTBOX_EXTRA_HOSTS    Comma-separated host:ip pairs added to container /etc/hosts
-                            Example: gitlab.example.com:host-gateway
+Environment variables:
+    ~/.agentbox/.env        Loaded into every container (global secrets, API keys, etc.)
+    $PROJECT_DIR/.env       Loaded into the container for that project only
+    AGENTBOX_EXTRA_HOSTS    Special variable in ~/.agentbox/.env: comma-separated host:ip
+                            pairs added to /etc/hosts. Example: gitlab.example.com:host-gateway
 
 Containers are ephemeral and automatically removed when you exit.
 Package caches and shell history persist between sessions.
