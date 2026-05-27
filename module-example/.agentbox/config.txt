@@ -1,5 +1,4 @@
 # AgentBox module configuration
 # One module per line, format: name or name:version
 
-java:25
 kotlin-lsp

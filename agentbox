@@ -19,17 +19,10 @@ readonly SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 readonly SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 readonly PROJECT_DIR="$(pwd)"
 readonly PROJECT_NAME="$(basename "$PROJECT_DIR")"
-readonly DOCKERFILE_PATH="${SCRIPT_DIR}/Dockerfile"
 readonly ENTRYPOINT_PATH="${SCRIPT_DIR}/entrypoint.sh"
 readonly IMAGE_NAME="agentbox:latest"
 readonly CONTAINER_PREFIX="agentbox"
-
-# Determine which Dockerfile to use (prefer .base if it exists)
-if [[ -f "${SCRIPT_DIR}/Dockerfile.base" ]]; then
-    readonly DOCKERFILE_BASE="${SCRIPT_DIR}/Dockerfile.base"
-else
-    readonly DOCKERFILE_BASE="${SCRIPT_DIR}/Dockerfile"
-fi
+readonly DOCKERFILE_BASE="${SCRIPT_DIR}/Dockerfile"
 
 # Set by check_runtime() in main()
 RUNTIME=""
@@ -402,13 +395,15 @@ run_container() {
 
     # Mount cache directories for package managers
     local cache_dir="${HOME}/.cache/agentbox/${container_name}"
-    mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle"
+    mkdir -p "${cache_dir}/npm" "${cache_dir}/pip" "${cache_dir}/maven" "${cache_dir}/gradle" "${cache_dir}/nvm" "${cache_dir}/sdkman"
 
     mount_opts+=(
         -v "${cache_dir}/npm:/home/agent/.npm"
         -v "${cache_dir}/pip:/home/agent/.cache/pip"
         -v "${cache_dir}/maven:/home/agent/.m2"
         -v "${cache_dir}/gradle:/home/agent/.gradle"
+        -v "${cache_dir}/nvm:/home/agent/.nvm"
+        -v "${cache_dir}/sdkman:/home/agent/.sdkman"
     )
 
     # Mount per-project persistent data
@@ -589,9 +584,8 @@ Module System:
     Create a .agentbox/config.txt file in your project to specify development tools:
 
     # One module per line
-    nodejs:20
-    java:17
     rust
+    neovim
 
     Modules are loaded from:
       1. .agentbox/modules/ (project-specific)

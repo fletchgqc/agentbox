@@ -4,6 +4,14 @@ set -e
 
 export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
 
+# Seed persistent volumes from image content on first run
+if [ ! -f "$HOME/.nvm/nvm.sh" ] && [ -d /opt/agentbox/seed/nvm ]; then
+    cp -a /opt/agentbox/seed/nvm/. "$HOME/.nvm/"
+fi
+if [ ! -f "$HOME/.sdkman/bin/sdkman-init.sh" ] && [ -d /opt/agentbox/seed/sdkman ]; then
+    cp -a /opt/agentbox/seed/sdkman/. "$HOME/.sdkman/"
+fi
+
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
     export NVM_DIR="$HOME/.nvm"
     source "$NVM_DIR/nvm.sh"

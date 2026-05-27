@@ -126,31 +126,16 @@ Create a `.agentbox/config.txt` file in your project:
 
 ```
 # One module per line, format: name or name:version
-nodejs:20
-java:17
 rust
+neovim
 ```
 
 AgentBox will automatically search upward from your current directory (like `.git`) to find the `.agentbox` directory.
 
-### Available Modules
-
-```bash
-# List all available modules
-agentbox modules list
-
-# Show details for a specific module
-agentbox modules info nodejs:20
-
-# Filter by name
-agentbox modules list nodejs
-```
-
 ### Built-in Modules
 
-- **nodejs:20, nodejs:22** - Node.js via nvm with global packages (typescript, eslint, prettier, yarn, pnpm)
-- **java:17, java:21, java:25** - Java via SDKMAN with Gradle and Maven
 - **rust** - Rust via rustup (version managed by rustup itself)
+- **neovim** - Neovim editor
 
 ### Module Capabilities
 
@@ -165,7 +150,11 @@ If no `.agentbox/config.txt` file is found, AgentBox builds a base image with:
 - Essential tools (git, vim, curl, jq, yq, etc.)
 - Build tools (gcc, make, cmake)
 - Python with uv
+- Node.js via NVM (LTS, additional versions installable at runtime)
+- Java via SDKMAN (JDK 21 + Gradle, additional versions installable at runtime)
 - Claude Code and OpenCode
+
+NVM and SDKMAN installations are persisted across container runs, so any versions installed at runtime (`nvm install 20`, `sdk install java 17`) are available in future sessions.
 
 This lets you use AgentBox immediately without configuration.
 
@@ -197,14 +186,14 @@ The `module-example/` directory contains a complete example project configuratio
 ```
 module-example/
   .agentbox/
-    config.txt          # Lists: java:25, kotlin-lsp
+    config.txt          # Lists: kotlin-lsp
     modules/
       kotlin-lsp/       # Custom module for Kotlin Language Server
         dockerfile
         env
 ```
 
-Copy this to your Java project to get started with Java 25 and Kotlin LSP support.
+Copy this to your Java project to get started with Kotlin LSP support.
 
 ## How It Works
 
@@ -215,7 +204,7 @@ AgentBox creates ephemeral containers (with `--rm`) that are automatically remov
     (per project)                        ↓
                     ┌───────────────────┼──────────────────┐
                     ↓                   ↓                  ↓
-          Project: nodejs+java   Project: rust      Project: base
+          Project: kotlin-lsp    Project: rust      Project: base
           Image: agentbox:a1b2   Image: agentbox:c3d4  Image: agentbox:base
           Container (ephemeral)  Container (ephemeral)  Container (ephemeral)
 
@@ -239,15 +228,35 @@ All AgentBox images include:
 - **Claude CLI**: Pre-installed with per-project authentication
 - **OpenCode**: Pre-installed as an alternative AI coding tool
 
-### Language Modules
+### Language Support (Base Image)
 
-Language-specific tools are installed via modules specified in `.agentbox`:
-
-- **Node.js** (via modules): Specify `nodejs:20` or `nodejs:22`
-- **Java** (via modules): Specify `java:17` or `java:21`  
-- **Rust** (via modules): Specify `rust`
+- **Node.js**: NVM with LTS pre-installed. Install additional versions at runtime (`nvm install 20`), persisted across sessions.
+- **Java**: SDKMAN with JDK 21 + Gradle pre-installed. Install additional versions at runtime (`sdk install java 17`), persisted across sessions.
+- **Rust** (via module): Specify `rust`
 
 This approach prevents version conflicts between projects and keeps images small
+
+### Installing Additional Node.js or Java Versions
+
+Each project gets its own persistent NVM and SDKMAN directories (`~/.cache/agentbox/<container-name>/nvm` and `sdkman`). Versions installed in one project don't affect others.
+
+**Node.js:**
+```bash
+agentbox shell            # start a shell in the project's container
+nvm install 20            # install Node.js 20 (persists for this project)
+nvm alias default 20      # set as default for this project
+exit
+```
+
+**Java:**
+```bash
+agentbox shell            # start a shell in the project's container
+sdk install java 17.0.9-tem   # install JDK 17 (persists for this project)
+sdk default java 17.0.9-tem  # set as default for this project
+exit
+```
+
+Use `nvm ls` and `sdk list java` to see available and installed versions.
 
 ## Authenticating to Git or other SCC Providers
 
@@ -311,11 +320,13 @@ Due to [Claude Code bug #6130](https://github.com/anthropics/claude-code/issues/
 ## Data Persistence
 
 ### Package Caches
-Package manager caches are stored in `~/.cache/agentbox/<container-name>/`:
-- npm packages: `~/.cache/agentbox/<container-name>/npm`
-- pip packages: `~/.cache/agentbox/<container-name>/pip`
+Package manager caches and tool installations are stored in `~/.cache/agentbox/<container-name>/`:
+- npm cache: `~/.cache/agentbox/<container-name>/npm`
+- pip cache: `~/.cache/agentbox/<container-name>/pip`
 - Maven artifacts: `~/.cache/agentbox/<container-name>/maven`
 - Gradle cache: `~/.cache/agentbox/<container-name>/gradle`
+- NVM (Node.js versions): `~/.cache/agentbox/<container-name>/nvm`
+- SDKMAN (Java versions): `~/.cache/agentbox/<container-name>/sdkman`
 
 ### Shell History
 Zsh history is preserved in `~/.agentbox/projects/<container-name>/history`

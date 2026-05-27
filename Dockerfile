@@ -198,6 +198,12 @@ set -g status-left '#[fg=green]#H '
 set -g status-right '#[fg=yellow]%Y-%m-%d %H:%M'
 EOF
 
+# Copy NVM and SDKMAN content to seed directory (used to initialize persistent volumes on first run)
+RUN mkdir -p /opt/agentbox/seed && \
+    cp -a /home/${USERNAME}/.nvm /opt/agentbox/seed/nvm && \
+    cp -a /home/${USERNAME}/.sdkman /opt/agentbox/seed/sdkman && \
+    chown -R ${USER_ID}:${GROUP_ID} /opt/agentbox/seed
+
 # Switch back to root for entrypoint setup
 USER root
 

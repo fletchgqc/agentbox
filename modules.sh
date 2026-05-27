@@ -6,7 +6,7 @@
 #############################################
 
 # Parse module spec into name and version
-# Usage: read name version < <(parse_module_spec "nodejs:20")
+# Usage: read name version < <(parse_module_spec "rust")
 parse_module_spec() {
     local spec="$1"
     if [[ "$spec" =~ : ]]; then
@@ -660,7 +660,7 @@ get_image_hash() {
         hash_input+="CONFIG:"$(cat "$config_file")$'\n'
     fi
     
-    # 3. Dockerfile.base content
+    # 3. Base Dockerfile content
     hash_input+="DOCKERFILE_BASE:"$(cat "$DOCKERFILE_BASE")$'\n'
     
     # 4. Module files content
