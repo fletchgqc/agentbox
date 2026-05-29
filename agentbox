@@ -335,6 +335,16 @@ run_container() {
         -v "${cache_dir}/gradle:/home/agent/.gradle"
     )
 
+    # SDK version caches are shared across projects (versions are large, project-agnostic)
+    local nvm_versions_dir="${HOME}/.agentbox/nvm/versions"
+    local sdkman_candidates_dir="${HOME}/.agentbox/sdkman/candidates"
+    mkdir -p "$nvm_versions_dir" "$sdkman_candidates_dir"
+
+    mount_opts+=(
+        -v "${nvm_versions_dir}:/home/agent/.nvm/versions"
+        -v "${sdkman_candidates_dir}:/home/agent/.sdkman/candidates"
+    )
+
     # Mount per-project persistent data
     local project_data_dir="${HOME}/.agentbox/projects/${container_name}"
     local history_dir="${project_data_dir}/history"
@@ -346,7 +356,7 @@ run_container() {
         --env "HISTFILE=/home/agent/.shell_history/zsh_history"
     )
 
-    if [[ "$tool" == "opencode" ]]; then
+    if [[ "$tool" == "opencode" || "$shell_mode" == "true" ]]; then
         local opencode_config_dir="${HOME}/.config/opencode"
         local opencode_auth_dir="${HOME}/.local/share/opencode"
 
@@ -359,7 +369,9 @@ run_container() {
         )
 
         log_info "OpenCode configuration and auth mounted"
-    else
+    fi
+
+    if [[ "$tool" == "claude" || "$shell_mode" == "true" ]]; then
         local claude_dir="${HOME}/.claude"
 
         mkdir -p "$claude_dir"
@@ -534,9 +546,11 @@ Examples:
     agentbox ssh-init                     # Set up SSH for AgentBox
     AGENTBOX_TOOL=opencode agentbox       # Use env var to select tool
 
-Environment variables (set in ~/.agentbox/.env):
-    AGENTBOX_EXTRA_HOSTS    Comma-separated host:ip pairs added to container /etc/hosts
-                            Example: gitlab.example.com:host-gateway
+Environment variables:
+    ~/.agentbox/.env        Loaded into every container (global secrets, API keys, etc.)
+    $PROJECT_DIR/.env       Loaded into the container for that project only
+    AGENTBOX_EXTRA_HOSTS    Special variable in ~/.agentbox/.env: comma-separated host:ip
+                            pairs added to /etc/hosts. Example: gitlab.example.com:host-gateway
 
 Containers are ephemeral and automatically removed when you exit.
 Package caches and shell history persist between sessions.

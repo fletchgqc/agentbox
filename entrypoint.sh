@@ -13,6 +13,27 @@ if [ -f "$HOME/.sdkman/bin/sdkman-init.sh" ]; then
     source "$HOME/.sdkman/bin/sdkman-init.sh"
 fi
 
+if [ -n "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/.nvmrc" ]; then
+    echo "🟢 Installing Node.js from .nvmrc..."
+    cd "$PROJECT_DIR"
+    nvm install 2>&1 || true
+    nvm use 2>&1 || true
+elif ! node --version > /dev/null 2>&1; then
+    echo "🟢 No Node.js found, installing LTS..."
+    nvm install --lts 2>&1 || true
+    nvm alias default node 2>/dev/null || true
+    nvm use default 2>/dev/null || true
+fi
+
+if [ -n "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/.sdkmanrc" ]; then
+    echo "☕ Installing SDK versions from .sdkmanrc..."
+    cd "$PROJECT_DIR"
+    sdk env install 2>&1 || true
+elif ! java -version > /dev/null 2>&1; then
+    echo "☕ No Java found, installing default (21.0.9-tem)..."
+    sdk install java 21.0.9-tem < /dev/null 2>&1 || true
+fi
+
 if [ -n "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR/.venv" ] && [ -f "$PROJECT_DIR/requirements.txt" -o -f "$PROJECT_DIR/pyproject.toml" -o -f "$PROJECT_DIR/setup.py" ]; then
     echo "🐍 Python project detected, creating virtual environment..."
     cd "$PROJECT_DIR"
