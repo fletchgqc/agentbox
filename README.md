@@ -192,6 +192,14 @@ Environment variables are passed to the container from these sources, in order (
 AGENTBOX_EXTRA_HOSTS="gitlab.example.com:host-gateway"
 ```
 
+`AGENTBOX_PROMPT_PREFIX` prepends to the default prompt in both shells, preserving the existing theme decorations (e.g. oh-my-zsh `git:(branch)`):
+
+```bash
+AGENTBOX_PROMPT_PREFIX="[box] "
+```
+
+For full control, `AGENTBOX_PROMPT` replaces the entire zsh `PROMPT`, and `AGENTBOX_BASH_PROMPT` replaces bash `PS1` (useful when you want shell-native color syntax in each: zsh `%F{red}` vs. bash `\[\e[31m\]`). A full override wins over the prefix when both are set; if only `AGENTBOX_PROMPT` is set, bash uses it too.
+
 AgentBox includes `direnv` support - `.envrc` files are evaluated if `direnv allow`ed on the host.
 
 ## MCP Server Configuration

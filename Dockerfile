@@ -166,6 +166,16 @@ if [[ -n "$PS1" ]] && command -v stty >/dev/null; then
 fi
 EOF
 
+# Allow custom shell prompt:
+#   AGENTBOX_PROMPT_PREFIX prepends to the default prompt (preserves theme decorations)
+#   AGENTBOX_PROMPT / AGENTBOX_BASH_PROMPT replace it entirely (full override wins over prefix)
+RUN printf '%s\n' \
+        '[ -n "$AGENTBOX_PROMPT_PREFIX" ] && PROMPT="$AGENTBOX_PROMPT_PREFIX$PROMPT"' \
+        '[ -n "$AGENTBOX_PROMPT" ] && PROMPT="$AGENTBOX_PROMPT"' >> ~/.zshrc && \
+    printf '%s\n' \
+        '[ -n "$AGENTBOX_PROMPT_PREFIX" ] && PS1="$AGENTBOX_PROMPT_PREFIX$PS1"' \
+        '[ -n "${AGENTBOX_BASH_PROMPT:-$AGENTBOX_PROMPT}" ] && PS1="${AGENTBOX_BASH_PROMPT:-$AGENTBOX_PROMPT}"' >> ~/.bashrc
+
 # Configure git
 RUN git config --global init.defaultBranch main && \
     git config --global pull.rebase false
