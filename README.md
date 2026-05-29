@@ -184,6 +184,8 @@ Environment variables are passed to the container from these sources, in order (
 2. `<project-dir>/.env` (project-specific)
 3. `-e KEY=VALUE` flags (command line)
 
+`-e KEY` (without `=`) passes through `KEY` from the host environment. Use `-e KEY=VALUE` to inject secrets from a manager, e.g. `agentbox -e GH_TOKEN=$(op read 'op://vault/item/token')`.
+
 `AGENTBOX_EXTRA_HOSTS` (in `~/.agentbox/.env`) injects entries into the container's `/etc/hosts` via Docker's `--add-host`. Useful when the container needs to reach host-tunneled services:
 
 ```bash
