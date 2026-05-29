@@ -503,7 +503,8 @@ Usage:
 Options:
     -h, --help                  Show this help message
     --tool TOOL                 Choose tool: claude (default) or opencode
-    -e KEY=VALUE                Pass environment variable to container (can be used multiple times)
+    -e KEY[=VALUE]              Pass environment variable to container (can be used multiple times)
+                                KEY alone forwards it from the host
     -p PORT                     Forward a port from host to container (can be used multiple times)
     --rebuild                   Force rebuild of the image
     --add-dir DIR               Mount additional directory (can be used multiple times)
@@ -528,7 +529,7 @@ Examples:
     agentbox shell --admin                # Start admin shell with sudo access
     agentbox --add-dir ~/1 --add-dir ~/2  # Add dirs with Claude CLI
     agentbox python script.py             # Run Python script in container
-    agentbox -e GH_TOKEN=\$(op read '...')  # Pass env var (e.g. from 1Password)
+    agentbox -e GH_TOKEN                  # Forward GH_TOKEN from host environment
     agentbox --rebuild                    # Force rebuild image
     agentbox ssh-init                     # Set up SSH for AgentBox
     AGENTBOX_TOOL=opencode agentbox       # Use env var to select tool
