@@ -246,7 +246,7 @@ RUN if [ "$AGENTBOX_INCLUDE_OPENCODE" = "true" ]; then \
 RUN if [ "$AGENTBOX_INCLUDE_PI" = "true" ]; then \
         export NVM_DIR="/home/agent/.nvm" && \
         [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
-        npm install -g @mariozechner/pi-coding-agent && \
+        npm install -g @earendil-works/pi-coding-agent && \
         zsh -i -c 'which pi && pi --version'; \
     fi
 
