@@ -84,6 +84,7 @@ $PROJECT_DIR            # Project directory (mounted at full host path)
 /home/agent/.m2         # Maven cache
 /home/agent/.gradle     # Gradle cache
 /home/agent/.shell_history  # History directory (HISTFILE env var points to zsh_history inside)
+/home/agent/.agents     # Centralized agents directory (skills, prompts, etc.)
 /home/agent/.claude     # Claude config
 /home/agent/.config/opencode  # OpenCode config
 /home/agent/.local/share/opencode  # OpenCode auth

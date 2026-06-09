@@ -372,6 +372,13 @@ run_container() {
         log_info "Claude CLI configuration mounted"
     fi
 
+    # Mount centralized agents directory (skills, prompts, etc.)
+    local agents_dir="${HOME}/.agents"
+    if [[ -d "$agents_dir" ]]; then
+        mount_opts+=(-v "${agents_dir}:/home/agent/.agents")
+        log_info "Agents directory mounted"
+    fi
+
     # Set tool environment variable
     mount_opts+=(--env "TOOL=$tool")
 
