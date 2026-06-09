@@ -4,6 +4,12 @@ set -e
 
 export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
 
+if [ -n "${HOST_HOME:-}" ] && [ "$HOST_HOME" != "$HOME" ] && [ ! -e "$HOST_HOME/.claude" ]; then
+    sudo mkdir -p "$HOST_HOME" 2>/dev/null || true
+    sudo ln -s "$HOME/.claude" "$HOST_HOME/.claude" 2>/dev/null && \
+        echo "✅ Symlinked $HOST_HOME/.claude -> $HOME/.claude for plugin path resolution"
+fi
+
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
     export NVM_DIR="$HOME/.nvm"
     source "$NVM_DIR/nvm.sh"

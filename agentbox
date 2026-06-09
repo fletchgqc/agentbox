@@ -367,6 +367,7 @@ run_container() {
         mount_opts+=(
             -v "${claude_dir}:/home/agent/.claude"
             --env "CLAUDE_CONFIG_DIR=/home/agent/.claude"
+            --env "HOST_HOME=${HOME}"
         )
 
         log_info "Claude CLI configuration mounted"
