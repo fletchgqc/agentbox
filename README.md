@@ -179,9 +179,12 @@ This will:
 3. Generate a new Ed25519 key pair (if preferred, delete them and manually place your desired SSH keys in `~/.agentbox/ssh/`).
 
 ### Environment Variables
-Environment variables are loaded from `.env` files in this order (later overrides earlier):
+Environment variables are passed to the container from these sources, in order (later overrides earlier):
 1. `~/.agentbox/.env` (global)
 2. `<project-dir>/.env` (project-specific)
+3. `-e KEY=VALUE` flags (command line)
+
+`-e KEY` (without `=`) passes through `KEY` from the host environment. Use `-e KEY=VALUE` to inject secrets from a manager, e.g. `agentbox -e GH_TOKEN=$(op read 'op://vault/item/token')`.
 
 `AGENTBOX_EXTRA_HOSTS` (in `~/.agentbox/.env`) injects entries into the container's `/etc/hosts` via Docker's `--add-host`. Useful when the container needs to reach host-tunneled services:
 
