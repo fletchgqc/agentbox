@@ -359,6 +359,16 @@ run_container() {
         )
 
         log_info "OpenCode configuration and auth mounted"
+    elif [[ "$tool" == "pi" ]]; then
+        local pi_dir="${HOME}/.pi"
+
+        mkdir -p "$pi_dir"
+
+        mount_opts+=(
+            -v "${pi_dir}:/home/agent/.pi"
+        )
+
+        log_info "Pi configuration mounted"
     else
         local claude_dir="${HOME}/.claude"
 
@@ -397,6 +407,8 @@ run_container() {
         local tool_cmd
         if [[ "$tool" == "opencode" ]]; then
             tool_cmd="opencode"
+        elif [[ "$tool" == "pi" ]]; then
+            tool_cmd="pi"
         else
             tool_cmd="claude --dangerously-skip-permissions"
         fi
@@ -502,7 +514,7 @@ Usage:
 
 Options:
     -h, --help                  Show this help message
-    --tool TOOL                 Choose tool: claude (default) or opencode
+    --tool TOOL                 Choose tool: claude (default), opencode, or pi
     -e KEY[=VALUE]              Pass environment variable to container (can be used multiple times)
                                 KEY alone forwards it from the host
     -p PORT                     Forward a port from host to container (can be used multiple times)
@@ -641,7 +653,7 @@ main() {
             --tool)
                 shift
                 if [[ -z "${1:-}" ]]; then
-                    log_error "--tool requires a value (claude or opencode)"
+                    log_error "--tool requires a value (claude, opencode, or pi)"
                     exit 1
                 fi
                 tool="$1"
@@ -675,8 +687,8 @@ main() {
     done
 
     # Validate tool selection
-    if [[ "$tool" != "claude" && "$tool" != "opencode" ]]; then
-        log_error "Invalid tool: $tool (must be 'claude' or 'opencode')"
+    if [[ "$tool" != "claude" && "$tool" != "opencode" && "$tool" != "pi" ]]; then
+        log_error "Invalid tool: $tool (must be 'claude', 'opencode', or 'pi')"
         exit 1
     fi
 
