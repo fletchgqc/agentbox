@@ -219,6 +219,11 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s stable && \
 RUN curl -fsSL https://opencode.ai/install | bash && \
     zsh -i -c 'which opencode && opencode --version'
 
+RUN export NVM_DIR="/home/${USERNAME}/.nvm" && \
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
+    npm install -g @earendil-works/pi-coding-agent && \
+    zsh -i -c 'which pi && pi --version'
+
 # Entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/bin/zsh"]
