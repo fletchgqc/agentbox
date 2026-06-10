@@ -87,7 +87,10 @@ $PROJECT_DIR            # Project directory (mounted at full host path)
 /home/agent/.claude     # Claude config
 /home/agent/.config/opencode  # OpenCode config
 /home/agent/.local/share/opencode  # OpenCode auth
+/home/agent/.agent-browser  # Agent-browser data (sessions, config) — see below
 ```
+
+**Agent-Browser Support**: The mount point for `~/.agent-browser/` persists session state across container restarts. agent-browser itself is not baked into the image — it is installed at runtime via the `docker-agent-browser` skill from [github.com/shrwnsan/agents](https://github.com/shrwnsan/agents). This avoids ~300-400MB image bloat and works with any tool (Claude, OpenCode, Pi).
 
 ## Testing Status
 - Basic functionality verified (help command, shell mode)

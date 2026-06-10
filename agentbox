@@ -345,6 +345,13 @@ run_container() {
         log_info "Claude CLI configuration mounted"
     fi
 
+    # Mount agent-browser data (sessions, config)
+    local agent_browser_dir="${HOME}/.agent-browser"
+    if [[ -d "$agent_browser_dir" ]]; then
+        mount_opts+=(-v "${agent_browser_dir}:/home/agent/.agent-browser")
+        log_info "Agent-browser data mounted"
+    fi
+
     # Set tool environment variable
     mount_opts+=(--env "TOOL=$tool")
 

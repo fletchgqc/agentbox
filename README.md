@@ -191,6 +191,10 @@ Both tools use bind mounts to share authentication across all AgentBox projects:
 - Config: `~/.config/opencode` mounted at `/home/agent/.config/opencode`
 - Auth: `~/.local/share/opencode` mounted at `/home/agent/.local/share/opencode`
 
+### Agent-Browser
+
+`~/.agent-browser` is mounted at `/home/agent/.agent-browser` for session persistence. To use agent-browser in containers, install the [docker-agent-browser skill](https://github.com/shrwnsan/agents) — it handles npm install and system Chromium setup (including the Linux ARM64 workaround).
+
 ## Advanced Usage
 
 ### Running One-Off Commands
