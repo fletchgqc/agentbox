@@ -360,7 +360,7 @@ run_container() {
 
         log_info "OpenCode configuration and auth mounted"
     else
-        local claude_dir="${HOME}/.claude"
+        local claude_dir="${CLAUDE_CONFIG_DIR:-${HOME}/.claude}"
 
         mkdir -p "$claude_dir"
 
@@ -369,7 +369,7 @@ run_container() {
             --env "CLAUDE_CONFIG_DIR=/home/agent/.claude"
         )
 
-        log_info "Claude CLI configuration mounted"
+        log_info "Claude CLI configuration mounted from ${claude_dir}"
     fi
 
     # Set tool environment variable

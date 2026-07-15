@@ -226,6 +226,7 @@ Both tools use bind mounts to share authentication across all AgentBox projects:
 
 **Claude CLI**:
 - `~/.claude` mounted at `/home/agent/.claude`
+- Set `CLAUDE_CONFIG_DIR` on the host to mount a different directory (e.g. separate work/personal accounts), matching native Claude Code.
 
 **OpenCode**:
 - Config: `~/.config/opencode` mounted at `/home/agent/.config/opencode`
